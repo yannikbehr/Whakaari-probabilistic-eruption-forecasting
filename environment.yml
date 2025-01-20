@@ -1,0 +1,45 @@
+name: whakaaribn
+channels:
+    - pytorch
+    - ankurankan
+    - plotly
+    - conda-forge
+dependencies:
+    - python=3.10
+    - cartopy
+    - ipdb
+    - ipykernel
+    - ipywidgets
+    - matplotlib
+    - numpy
+    - pandas
+    - plotly
+    - python-kaleido
+    - seaborn
+    - scikit-learn
+    - scipy
+    - statsmodels
+    - requests
+    - pytest
+    - tqdm
+    - obspy
+    - nbformat
+    - nbconvert
+    - flake8
+    - pytest-cov
+    - pytorch
+    - cpuonly
+    - pgmpy
+    - netcdf4
+    - xarray
+    - pymc
+    - pip
+    - pip:
+        - pyro-ppl
+        - cachier==1.5
+        - schedule==1.1
+        - python-json-logger==2.0
+        - dash
+        - dash-bootstrap-components
+        - kernda
+        - tonik>=0.0.10

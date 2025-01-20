@@ -1,0 +1,8 @@
+./whakaaribn/data/LP
+./whakaaribn/data/VLP
+./docker_build_local.sh
+./Dockerfile
+./git
+__pycache__
+./examples/data
+./.cache

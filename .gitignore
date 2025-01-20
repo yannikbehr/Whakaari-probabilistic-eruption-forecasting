@@ -1,0 +1,10 @@
+whakaaribn.egg*
+__pycache__
+*~
+*.png
+.vscode
+.devcontainer
+examples/data
+.cache
+.ipynb_checkpoints
+

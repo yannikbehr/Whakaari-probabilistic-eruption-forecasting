@@ -1,0 +1,32 @@
+version: '3.8'
+services:
+  whakaaribn:
+    stop_grace_period: 60s
+    deploy:
+      update_config:
+        order: start-first   
+    image: ${IMAGE}
+    user: ${GESSP_OP_UID}:${GESSP_OP_GID}
+    entrypoint: /env/bin/bayes_daemon
+    networks:
+      - portainer_web_proxy
+    volumes:
+      - /mnt/gessp/volcano/whakaaribn/bayesbox_data:/opt/data
+
+  whakaaribnDB:
+    stop_grace_period: 60s
+    deploy:
+      update_config:
+        order: start-first
+    image: ${IMAGE}
+    user: ${GESSP_OP_UID}:${GESSP_OP_GID}
+    entrypoint: /env/bin/bn_dashboard
+    environment:
+      DASH_URL_BASE_PATHNAME: "/whakaaribn/"
+      BAYESNET_URL: "https://gessp.gns.cri.nz/"
+    networks:
+      - portainer_web_proxy
+        
+networks:
+  portainer_web_proxy:
+    external: true

@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "whakaaribn"
+version = "0.0.6"
+authors = [
+    {name = "Yannik Behr", email = "y.behr@gns.cri.nz"},
+    {name = "Craig Miller", email = "c.miller@gns.cri.nz"},
+    {name = "Annemarie Christophersen", email = "a.christophersen@gns.cri.nz"}
+]
+description = "Eruption forecasting for Whakaari/White Island using Bayesian Networks."
+license = {text = "GPL v3"}
+
+[project.scripts]
+bayes_daemon = "whakaaribn.job_scheduler:main"
+whakaari_forecasts = "whakaaribn.forecast:main"
+
+
+[tool.setuptools.packages]
+find = {}
+
+[tool.setuptools.package-data]
+whakaaribn = ["data/*.json",
+             "data/WhiteIs_Eruption_Catalogue.csv",
+             "data/LP/WIZ_labels.csv"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+log_cli = true
+
+[tool.ruff.lint]
+unfixable = ["F401"]
