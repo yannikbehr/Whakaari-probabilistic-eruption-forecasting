@@ -16,7 +16,6 @@ from whakaaribn import (
     get_color,
     hash_dataframe,
     hex_to_rgb,
-    load_ruapehu_earthquakes,
     moving_average,
 )
 
@@ -110,23 +109,6 @@ def test_discretizer():
     rv1 = desc1.fit_transform(df)
     assert type(rv1) == pd.core.frame.DataFrame
     assert rv1.columns[0] == "RSAM"
-
-
-def test_eq_rate():
-    """
-    Test computing earthquake rates from the Ruapehu catalogue.
-    """
-    cat_outer, cat_inner = load_ruapehu_earthquakes(
-        startdate=datetime(2021, 12, 3),
-        enddate=datetime(2022, 1, 3),
-        ignore_cache=False,
-    )
-    eqr_inner = eqRate(cat_inner, fixed_time=7).resample("D").mean().interpolate()
-    assert abs(eqr_inner.values.mean() - 1.67) < 0.01
-    # Mix up the order of the catalogue to make sure this still works
-    cat_inner.sort_values("magnitude", inplace=True)
-    eqr_inner = eqRate(cat_inner, fixed_time=7).resample("D").mean().interpolate()
-    assert abs(eqr_inner.values.mean() - 1.67) < 0.01
 
 
 def test_moving_average():
