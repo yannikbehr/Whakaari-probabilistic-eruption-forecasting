@@ -1,25 +1,24 @@
 from datetime import date, datetime, timedelta
 from io import StringIO
+import os
 
 import numpy as np
 import pandas as pd
 import requests
 from cachier import cachier
-from scipy.stats import binom
 
 from whakaaribn import get_data
 from whakaaribn.util import eqRate, gradient, reindex
 from whakaaribn.assimilate import SO2FusionModel
 
 
-@cachier(stale_after=timedelta(days=1), cache_dir="~/.cache")
 def load_whakaari_rsam(
     startdate=datetime(2007, 1, 1, 0, 0, 0),
     enddate=datetime.utcnow(),
-    shortperiod=False,
 ):
     """
-    Load RSAM values from WIZ.
+    Load RSAM values NZ.WIZ.10.HHZ. This will download the data from Zenodo
+    if it is not already available locally.
 
     Parameters:
     -----------
@@ -28,23 +27,27 @@ def load_whakaari_rsam(
         :param enddate: The latest date of the time-series.
                         Mainly needed for testing.
         :type enddate: :class:`datetime.datetime`
-        :param shortperiod: Whether or not to include RSAM from the
-                            short-period sensor.
-        :type shortperiod: bool
 
     Returns:
     --------
         :param df: Dataframe with RSAM values.
         :type df: :class:`pandas.DataFrame`
     """
-    url = "http://kaizen.gns.cri.nz:9157/feature?name=RSAM&"
-    url += "starttime={}&endtime={}&volcano=Whakaari&site=WIZ".format(
-        startdate.isoformat(), enddate.isoformat()
-    )
-    df = pd.read_csv(
-        url, header=None, skiprows=1, names=["dt", "obs"], index_col=0, parse_dates=True
-    )
-    df.index = pd.DatetimeIndex(df.index)
+    rsam_fn = get_data('data/RSAM_NZ.WIZ.10.HHZ.csv')
+    if not os.path.isfile(rsam_fn):
+        # download the data from zenodo
+        print('Downloading RSAM data from Zenodo')
+        url = "https://zenodo.org/records/14759090/files/RSAM_NZ.WIZ.10.HHZ.csv"
+        response = requests.get(url)
+        if response.status_code == 200:
+            with open(rsam_fn, "wb") as f:
+                f.write(response.content)
+            print('Successfully downloaded RSAM data from Zenodo')
+        else:
+            print('Failed to download RSAM data from Zenodo')
+
+    df = pd.read_csv(rsam_fn, skiprows=1, parse_dates=True, names=['dt', 'obs'], index_col=0,
+                     date_format='ISO8601')
     df = df.tz_localize(None)
     if enddate is not None:
         df = df[df.index <= enddate]
@@ -439,44 +442,6 @@ def load_whakaari_catalogue(eruption_scale, dec_interval, exclude=True):
     return eruptions[(eruptions.delta >= dec_interval)]
 
 
-def load_whakaari_lp(startdate=None, enddate=datetime.utcnow()):
-    """
-    Load LP events recorded at Whakaari.
-    """
-    df_lp = pd.read_csv(
-        get_data("data/LP/WIZ_labels.csv"),
-        parse_dates=True,
-        index_col=0,
-        names=["dt", "obs"],
-    )
-    df_lp = df_lp[df_lp.obs > 0.0]
-    df = df_lp.groupby(pd.Grouper(freq="1D")).sum()
-    df = df[df.index <= str(enddate)]
-    if startdate is not None:
-        df = df[df.index >= str(startdate)]
-    df = df.tz_localize(None)
-    return df
-
-
-def load_whakaari_vlp(startdate=None, enddate=datetime.utcnow()):
-    """
-    Load VLP events recorded at Whakaari.
-    """
-    df_vlp = pd.read_csv(
-        get_data("data/VLP/WIZ_labels.csv"),
-        parse_dates=True,
-        index_col=0,
-        names=["dt", "obs"],
-    )
-    df_vlp = df_vlp[df_vlp.obs > 0.0]
-    df = df_vlp.groupby(pd.Grouper(freq="1D")).sum()
-    df = df[df.index <= str(enddate)]
-    if startdate is not None:
-        df = df[df.index >= str(startdate)]
-    df = df.tz_localize(None)
-    return df
-
-
 @cachier(stale_after=timedelta(days=7), cache_dir="~/.cache")
 def load_all_whakaari_data(
     fill_method="interpolate",
@@ -517,12 +482,6 @@ def load_all_whakaari_data(
             enddate=enddate, fuse=fuse_so2, smooth=smooth, ignore_cache=ignore_all_caches
         )
         cols["SO2"] = reindex(so2, new_dates, fill_method=fill_method)
-    if "LP" not in ignore_data:
-        lp = load_whakaari_lp(enddate=enddate)
-        cols["LP"] = reindex(lp, new_dates, fill_method=fill_method)
-    if "VLP" not in ignore_data:
-        vlp = load_whakaari_vlp(enddate=enddate)
-        cols["VLP"] = reindex(vlp, new_dates, fill_method=fill_method)
     rdf = pd.DataFrame(cols, index=new_dates)
     rdf = rdf[rdf.index <= str(enddate)]
     rdf = rdf[rdf.index >= str(startdate)]
