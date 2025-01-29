@@ -1,0 +1,36 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/python
+{
+	"name": "whakaari-bn-dev",
+	"build": {
+		"dockerfile": "../Dockerfile",
+		"context": "..",
+		"args":{
+			"D_UID": "${localEnv:D_UID}",
+			"D_GID": "${localEnv:D_GID}"
+		} 
+	},
+
+	// Features to add to the dev container. More info: https://containers.dev/features.
+	// "features": {},
+
+	// Use 'forwardPorts' to make a list of ports inside the container available locally.
+	//"forwardPorts": [8050],
+	// Use 'postCreateCommand' to run commands after the container is created.
+	"postCreateCommand": "/env/bin/pip install -e .",
+
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-python.python",
+				"ms-toolsai.jupyter",
+				"astral-sh.ruff"
+			]
+		}
+	}
+	// Configure tool-specific properties.
+	// "customizations": {},
+
+	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
+	// "remoteUser": "root"
+}
