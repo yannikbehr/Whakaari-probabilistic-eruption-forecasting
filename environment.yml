@@ -43,3 +43,4 @@ dependencies:
         - dash-bootstrap-components
         - kernda
         - tonik>=0.0.10
+        - owslib
