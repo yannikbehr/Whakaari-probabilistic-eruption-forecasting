@@ -461,7 +461,7 @@ def load_all_whakaari_data(
     if "Eqr" not in ignore_data:
         cols["Eqr"] = reindex(dft, new_dates, fill_method=fill_method)
     if "RSAM" not in ignore_data:
-        rsam = load_whakaari_rsam(enddate=enddate, ignore_cache=ignore_all_caches)
+        rsam = load_whakaari_rsam(enddate=enddate)
         cols["RSAM"] = reindex(rsam, new_dates, fill_method=fill_method)
     if "CO2" not in ignore_data:
         co2 = load_whakaari_gas(
