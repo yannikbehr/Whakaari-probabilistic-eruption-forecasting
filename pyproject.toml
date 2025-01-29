@@ -23,8 +23,7 @@ find = {}
 
 [tool.setuptools.package-data]
 whakaaribn = ["data/*.json",
-             "data/WhiteIs_Eruption_Catalogue.csv",
-             "data/LP/WIZ_labels.csv"]
+             "data/WhiteIs_Eruption_Catalogue.csv"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
