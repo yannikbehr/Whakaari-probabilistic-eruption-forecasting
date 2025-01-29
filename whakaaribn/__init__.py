@@ -10,10 +10,8 @@ from .data import (
     load_all_whakaari_data,
     load_whakaari_catalogue,
     load_whakaari_gas,
-    load_whakaari_lp,
     load_whakaari_rsam,
     load_whakaari_so2,
-    load_whakaari_vlp,
 )
 from .util import (
     Bin,
