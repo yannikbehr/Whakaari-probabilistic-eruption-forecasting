@@ -1,63 +1,53 @@
- [![pipeline status](https://git.gns.cri.nz/behrya/whakaaribn/badges/master/pipeline.svg)](https://git.gns.cri.nz/behrya/whakaaribn/-/commits/master)
-
-
-## Probabilistic decision making for volcano monitoring
-This is a Python package to forecast the probability of
-an eruption given expert opinion and volcano monitoring data
-using a Bayesian Network.
-
-It requires input data from the [FITS](https://fits.geonet.org.nz/) webservice.
-Other data, such as RSAM, comes with the package. The resulting Bayesian
-Network can be accessed at http://volcanolab.gns.cri.nz:8081.
+## Probabilistic eruption forecasting for Whakaari/White Island using Bayesian Networks
+This is the source code accompanying the manuscript on probabilistic eruption forecasting for Whakaari/White Island using Bayesian Networks. A pre-print of the manuscript can be found [here](https://essopenarchive.org/users/820715/articles/1219096-probabilistic-multi-sensor-eruption-forecasting).
 
 Maintainer: [Yannik Behr](mailto:y.behr@gns.cri.nz)
 
-## Install
+## Installation
+
+### Dependencies
+The python package depends on the SMILE library for Bayesian Network learning and inference. The library is written and maintained by [BayesFusion](https://www.bayesfusion.com/) and is free for academic users.
+
+### Download the source code using git
+
+```
+git clone https://github.com/yannikbehr/whakaari_eruption_forecasting.git
+cd whakaari_eruption_forecasting
+```
 
 ### Setup the conda environment
 ```
 conda env create -f environment.yml
+conda activate whakaaribn
+```
+### Installing the PYSMILE library
+```
+pip install --index-url https://support.bayesfusion.com/pysmile-B/ pysmile
+```
+Next obtain a license from [BayesFusion](https://www.bayesfusion.com/).
+Academic users can obtain a free license, all other users can get a 30-day evaluation license
+here: (https://download.bayesfusion.com/files.html?category=Business).
+Once you have unzipped the package with license files run the following command to copy the license key to the correct place:
+
+```
+cp pysmile_license.py $(python -c "import site; print(site.getsitepackages()[0]))
 ```
 
 ### Install the package
 ```
-conda activate whakaaribn
-python setup.py develop
+pip install .
 ```
 
-## Operations
-### External dependencies
-The following has to run on volcanolab.gns.cri.nz
-  * docker volume: `bayesbox_data`
-  * docker image: `bayesbox`
- 
-## Contributions
-
-* Clone the repository
-
+### Run the Jupyter notebook
+First install a jupyter notebook server
 ```
-git clone repo_name
+pip install notebook
 ```
 
-* Create a new branch
-
+Then start the notebook server
 ```
-git checkout -b branch_name
-```
-
-* Fix a bug or add a feature
-* Commit changes and push the branch to the repository:
-
-```
-git add changed_or_new_file.py
-git commit -m "some message"
-git push -U origin branch_name
+jupyter notebook
 ```
 
-Confirm the new output is correct
-
-
-Request code review
-
-
-Merge branch into master/main branch
+And finally open the notebook `Whakaari_BN.ipynb` located under the `/examples` directory.
+To generate all the figures from the manuscript go to `Run` -> `Run All Cells`.
