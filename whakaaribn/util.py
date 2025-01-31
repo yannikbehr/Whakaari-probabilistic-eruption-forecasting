@@ -8,9 +8,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, OneToOneFeatureMixin, TransformerMixin
-from sklearn.utils.validation import validate_data
 from sklearn.datasets import get_data_home
-from sklearn.utils.validation import check_array, check_is_fitted
+from sklearn.utils.validation import check_array, check_is_fitted, validate_data
 from statsmodels.tools.sm_exceptions import ConvergenceWarning
 from tqdm import tqdm
 
@@ -385,15 +384,17 @@ class Discretizer(OneToOneFeatureMixin, BaseEstimator, TransformerMixin):
         strategy="quantile",
         dropzeros=False,
         extrapolate=True,
+        factor=0,
     ):
         self.bins = bins
         self.names = names
         self.strategy = strategy
         self.dropzeros = dropzeros
         self.extrapolate = extrapolate
+        self.factor = factor
 
     def fit(self, X, y=None):
-        X = self._validate_data(X, force_all_finite="allow-nan", reset=True)
+        X = validate_data(self, X, reset=True, ensure_all_finite="allow-nan")
         try:
             self.nbins = len(self.bins) - 1
         except TypeError:
@@ -411,6 +412,7 @@ class Discretizer(OneToOneFeatureMixin, BaseEstimator, TransformerMixin):
                 names=self.names,
                 returnbins=True,
                 dropzeros=self.dropzeros,
+                factor=self.factor
             )
         self.n_features_ = X.shape[1]
         return self
@@ -443,7 +445,7 @@ class Discretizer(OneToOneFeatureMixin, BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         check_is_fitted(self, "n_features_")
-        X = self._validate_data(X, force_all_finite="allow-nan", reset=False)
+        X = validate_data(self, X, reset=False, ensure_all_finite="allow-nan")
         X_binned = np.full(X.shape, "*", "<U8")
         for col_idx in range(X.shape[1]):
             X_binned[:, col_idx] = self.query(
