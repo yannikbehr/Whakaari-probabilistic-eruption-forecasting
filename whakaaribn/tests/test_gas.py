@@ -4,26 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from whakaaribn import BinData, load_ruapehu_gas, load_whakaari_gas, load_whakaari_so2
-
-
-@pytest.mark.webservice
-def test_ruapehu():
-    co2data = load_ruapehu_gas("co2", enddate=datetime(2020, 8, 31), ignore_cache=True)
-    so2data = load_ruapehu_gas("so2", enddate=datetime(2020, 8, 31), ignore_cache=True)
-    h2sdata = load_ruapehu_gas("h2s", enddate=datetime(2020, 8, 31), ignore_cache=True)
-
-    co2b = BinData(co2data, "obs", bins=[0, 68.27, 95.45, 100], btype="freq")
-    so2b = BinData(so2data, "obs", bins=[0, 68.27, 95.45, 100], btype="freq")
-    h2sb = BinData(h2sdata, "obs", bins=[0, 68.27, 95.45, 100], btype="freq")
-
-    np.testing.assert_array_almost_equal(co2b.marginals(), (0.682, 0.273, 0.045), 3)
-    np.testing.assert_array_almost_equal(so2b.marginals(), (0.682, 0.271, 0.047), 3)
-    np.testing.assert_array_almost_equal(h2sb.marginals(), (0.676, 0.268, 0.056), 3)
-
-    assert co2b.query(500) == co2b.binnames[0]
-    assert co2b.query(1000) == co2b.binnames[1]
-    assert co2b.query(2100) == co2b.binnames[2]
+from whakaaribn import BinData, load_whakaari_gas, load_whakaari_so2
 
 
 @pytest.mark.webservice
@@ -84,7 +65,7 @@ def test_whakaari_so2(monkeypatch):
     Test loading SO2 data from Whakaari.
     """
     monkeypatch.setattr("whakaaribn.data._load_whakaari_so2", generate_mock_data)
-    so2 = load_whakaari_so2()
+    so2 = load_whakaari_so2(fuse=False)
     assert abs(so2["obs"].mean() - 27.32) < 0.1
 
 
