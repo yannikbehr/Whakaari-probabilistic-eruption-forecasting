@@ -1,9 +1,9 @@
+import math
 import os
 import tempfile
 
-import ipdb
+import numpy as np
 import pysmile
-
 import pysmile_license
 
 
@@ -99,10 +99,7 @@ class BayesNet(object):
                 msg = msg.format(nid, self.net.get_evidence(nhandle))
                 msgs.append(msg)
             else:
-                try:
-                    posteriors = self.net.get_node_value(nhandle)
-                except:
-                    ipdb.set_trace()
+                posteriors = self.net.get_node_value(nhandle)
                 for i in range(0, len(posteriors)):
                     msg = "P({}={}) = {}"
                     msg = msg.format(
@@ -118,3 +115,52 @@ class BayesNet(object):
         else:
             self.net.set_evidence(node)
         self.net.update_beliefs()
+
+
+def circular_node_positions(num_nodes, radius=200, offset=(200, 200)):
+    positions = []
+    for i in range(num_nodes):
+        theta = (2 * math.pi * i) / num_nodes
+        x = radius * math.cos(theta)
+        y = radius * math.sin(theta)
+        positions.append((int(x+offset[0]), int(y+offset[1])))
+    return positions
+
+def stacked_node_positions(num_causal_nodes, num_child_nodes, x_child=150,
+                           y_causal=200, y_child=100, node_distance=100):
+    """
+    Create node positions for a stacked layout where causal nodes are at the top and child nodes at the bottom.
+    """
+    x_causal = int((x_child + (num_child_nodes-1)*node_distance) / 2. - (num_causal_nodes-1)*node_distance / 2.)
+    positions = []
+    for i in range(num_causal_nodes):
+        positions.append((x_causal + i*node_distance, y_causal))
+    for i in range(num_child_nodes):
+        positions.append((x_child + i*node_distance, y_child))
+    return positions
+
+def fully_connected(nodes):
+    edges = []
+    for i in range(len(nodes)):
+        for j in range(i+1, len(nodes)):
+            edges.append((nodes[i], nodes[j]))
+    return edges
+
+def causal(causal_nodes, child_nodes):
+    edges = []
+    for i in range(len(child_nodes)):
+        for j in range(len(causal_nodes)):
+            edges.append((causal_nodes[j], child_nodes[i]))
+    return edges
+
+def create_network(network_file, node_names, positions, edges):
+    net_ = BayesNet()
+    for node, pos in zip(node_names, positions):
+        node_name, states = node
+        nstates = len(states) 
+        node = net_.add_node(node_name, states, np.ones(nstates)/nstates, 
+                             description=node_name, position=pos)
+    for parent, child in edges:
+        net_.add_arc(parent, child)
+    net_.write(network_file)
+

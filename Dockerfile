@@ -1,7 +1,7 @@
 ARG ROOT_CONTAINER=condaforge/miniforge3:23.11.0-0
 ARG BASE_CONTAINER=$ROOT_CONTAINER
 
-FROM $BASE_CONTAINER AS base 
+FROM $BASE_CONTAINER 
 
 ARG D_USER="linus"
 ARG D_UID="1000"
@@ -34,7 +34,7 @@ RUN /env/bin/pip install --index-url https://support.bayesfusion.com/pysmile-B/ 
 
 COPY . .
 
-#RUN /env/bin/pip install -e .
+RUN /env/bin/pip install -e .
 
 VOLUME ["/opt/data"]
 VOLUME ["/home/$D_USER/workspace"]

@@ -1,9 +1,10 @@
 import math
 import os
-import tempfile
+from typing import Optional
 from collections import defaultdict
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timezone
+import logging
 
 import numpy as np
 import pandas as pd
@@ -12,18 +13,24 @@ from pysmile import SMILEException
 from sklearn import set_config
 from sklearn.base import BaseEstimator
 from sklearn.pipeline import Pipeline
+from tqdm import tqdm
 from tonik import Storage
+from aitana import whakaari
 
 from whakaaribn import (
     BayesNet,
     Discretizer,
     convert_probability,
-    load_all_whakaari_data,
-    load_whakaari_catalogue,
     moving_average,
+    get_data,
+    circular_node_positions,
+    fully_connected,
+    create_network
 )
 
 set_config(transform_output="pandas")
+
+logger = logging.getLogger(__name__)
 
 
 def pre_eruption_window(data: np.ndarray, ewin: int) -> np.ndarray:
@@ -51,6 +58,7 @@ def pre_eruption_window(data: np.ndarray, ewin: int) -> np.ndarray:
 
 
 def get_group_labels(
+    eruptions,
     startdate=datetime(2010, 1, 1),
     enddate=datetime.utcnow(),
     ndays=30,
@@ -87,7 +95,6 @@ def get_group_labels(
         list
             Group labels
     """
-    eruptions = load_whakaari_catalogue(min_size, "0D")
     dfe = eruptions.loc[startdate:]
     dt = []
     group_times = []
@@ -114,20 +121,35 @@ def get_group_labels(
     return np.array(group_labels)
 
 
+def group_train_test_split(data, groups):
+    assert len(data) == len(groups)
+    data_ = pd.DataFrame(data.copy())
+    data_["group"] = groups
+    test_data = data_[data_["group"] == "d"]
+    remainder = data_[data_["group"] == "e"]
+    train_data = data_.drop(data_[(data_.group == "d") | (data_.group == "e")].index)
+    test = test_data.drop(columns=["group"])
+    train = train_data.drop(columns=["group"])
+    remainder = remainder.drop(columns=["group"])
+    return train, test, remainder
+
+
 class WhakaariModel(BaseEstimator):
     def __init__(
         self,
         modelfile,
+        modeldir=None,
         hidden_nodes=True,
         eq_sample_size=0,
         expert_only=False,
         smoothing=None,
         randomize=False,
         uniformize=False,
-        debug=False,
+        debug=False
     ):
         self.hidden_nodes = hidden_nodes
         self.modelfile = modelfile
+        self.modeldir = modeldir
         self.eq_sample_size = eq_sample_size
         self.hidden_proba_ = None
         self.smoothing = smoothing
@@ -143,9 +165,12 @@ class WhakaariModel(BaseEstimator):
         self.classes_ = np.unique(y)
         self.net_ = BayesNet()
         if self.modelfile is not None:
-            if not os.path.isfile(self.modelfile):
-                raise FileNotFoundError("Can't find file " + self.modelfile)
-            self.net_.net.read_file(self.modelfile)
+            modelfile = self.modelfile
+            if self.modeldir is not None:
+                modelfile = os.path.join(self.modeldir, modelfile)
+            if not os.path.isfile(modelfile):
+                raise FileNotFoundError("Can't find file " + modelfile)
+            self.net_.net.read_file(modelfile)
             if isinstance(self.eq_sample_size, int):
                 eq_sample_size = self.eq_sample_size
             elif isinstance(self.eq_sample_size, float):
@@ -268,115 +293,98 @@ class SequentialGroupSplit:
 
 
 class WhakaariForecasts(object):
-    def __init__(self, output_dir: str = tempfile.gettempdir()):
-        self.forecast_store = Storage("eruption_forecasts", rootdir=output_dir)
-        self.zarr_store = os.path.join(output_dir, "whakaari_forecasts.zarr")
-        self.modelfile_dir = os.path.join(output_dir, "models")
-        os.makedirs(self.modelfile_dir, exist_ok=True)
-
-    def group_train_test_split(self, data, groups):
-        assert len(data) == len(groups)
-        data_ = pd.DataFrame(data.copy())
-        data_["group"] = groups
-        test_data = data_[data_["group"] == "d"]
-        remainder = data_[data_["group"] == "e"]
-        train_data = data_.drop(data_[data_.group == "d"].index)
-        train_data = train_data.drop(train_data[data_.group == "e"].index)
-
-        test = test_data.drop(columns=["group"])
-        train = train_data.drop(columns=["group"])
-        remainder = remainder.drop(columns=["group"])
-        return train, test, remainder
-
-    def get_train_test_data(self, data, ndays=30, min_interval=360, min_size=2):
-        groups = get_group_labels(
-            data.index[0],
-            data.index[-1],
-            ndays=ndays,
-            min_interval=min_interval,
-            min_size=min_size,
+    def __init__(self, start_date=datetime(2009, 1, 1), end_date=datetime(2025, 4, 16),
+                 output_dir: Optional[str] = None, posteruption_days=30,
+                 min_eruption_size=2, min_intereruption_int=360):
+        self.output_dir = output_dir
+        if output_dir is not None:
+            self.zarr_store = os.path.join(output_dir, "whakaari_forecasts.zarr")
+            self.modelfile_dir = os.path.join(output_dir, "models")
+            os.makedirs(self.modelfile_dir, exist_ok=True)
+        self.data = whakaari.load_all(
+            fill_method=None,
+            start_date=start_date,
+            end_date=end_date,
+            ignore_data=("LP", "VLP"),
+            fuse_so2=False
         )
-        X_train, X_test, X_remainder = self.group_train_test_split(data, groups)
-        eruptions = load_whakaari_catalogue(min_size, "0D")
-        dfe = eruptions.loc[data.index[0] :]
+        self.eruptions = whakaari.eruptions(min_eruption_size, "0D", end_date=end_date)
+        self.groups = get_group_labels(
+            self.eruptions,
+            self.data.index[0],
+            self.data.index[-1],
+            ndays=posteruption_days,
+            min_interval=min_intereruption_int,
+            min_size=min_eruption_size,
+        )
+
+    def latest_data_point(self):
+        """
+        Get the latest data point in the dataset that is not null. This
+        only takes into account gas flux data at the moment as other data
+        is currently unavailable.
+        """
+        latest_valid_index = self.data['SO2'].last_valid_index()
+        for col in ['SO2', 'CO2', 'H2S']:
+            last_valid_index = self.data[col].last_valid_index()
+            if last_valid_index > latest_valid_index:
+                latest_valid_index = last_valid_index
+        return latest_valid_index
+
+
+    def get_train_test_data(self, data=None):
+        if data is None:
+            data = self.data
+        X_train, X_test, X_remainder = group_train_test_split(data, self.groups)
+        dfe = self.eruptions.loc[data.index[0] :]
         dates = pd.date_range(data.index[0], data.index[-1], freq="1D")
         dfe = dfe.reindex(dates, fill_value=0)
-        dfe.drop(["delta", "tvalue"], axis=1, inplace=True)
-        y_train, y_test, y_remainder = self.group_train_test_split(
-            np.sign(dfe["Activity_Scale"]), groups
+        y_train, y_test, y_remainder = group_train_test_split(
+            np.sign(dfe["Activity_Scale"]), self.groups
         )
-        return X_train, X_test, X_remainder, y_train, y_test, y_remainder, groups
-
-    def calculate_node_positions(self, num_nodes, radius, offset=(0, 0)):
-        positions = []
-        for i in range(num_nodes):
-            theta = (2 * math.pi * i) / num_nodes
-            x = radius * math.cos(theta)
-            y = radius * math.sin(theta)
-            positions.append((int(x + offset[0]), int(y + offset[1])))
-        return positions
-
-    def fully_connected(self, nodes):
-        edges = []
-        for i in range(len(nodes)):
-            for j in range(i + 1, len(nodes)):
-                edges.append((nodes[i], nodes[j]))
-        return edges
-
-    def create_network(self, network_file, node_names, positions, edges):
-        net_ = BayesNet()
-        for node, pos in zip(node_names, positions):
-            node_name, states = node
-            nstates = len(states)
-            node = net_.add_node(
-                node_name,
-                states,
-                np.ones(nstates) / nstates,
-                description=node_name,
-                position=pos,
-            )
-        for parent, child in edges:
-            net_.add_arc(parent, child)
-        net_.write(network_file)
+        return X_train, X_test, X_remainder, y_train, y_test, y_remainder
 
     def forecasts(
         self,
-        data: pd.DataFrame,
         exclude_from_test: Sequence = (),
         pew: int = 30,
         expert_only: bool = False,
         eq_sample_size: int = 1,
-        modelfile: str = "data/Whakaari_4s_initial1.xdsl",
+        modelfile: str = "Whakaari_4s_initial1.xdsl",
+        modeldir: str = 'data',
         bins: tuple = (0, 5, 95, 100),
         hidden_nodes: bool = True,
         uniformize: bool = False,
         randomize: bool = False,
-        recompute=False,
-        save_trained_model=False,
-        smoothing=None,
+        recompute: bool = False,
+        smoothing: int = None,
+        factor: float = 0.,
+        hindcast: bool = False
     ):
         """
         Compute BN forecasts
         """
-        group = "/model={}/expert_only={}/bins={}/eq_sample_size={}/pew={}/exclude_from_test={}".format(
-            modelfile.replace("/", "_"),
-            expert_only,
-            str(bins),
-            eq_sample_size,
-            pew,
-            exclude_from_test,
-        )
-        path = os.path.join(self.zarr_store, group[1:])
-        if os.path.isdir(path) and not recompute:
-            xds = xr.open_zarr(path, consolidated=False)
-            print(f"Loading forecasts from {path}")
-            return xds
-        data_fill = data.ffill(axis=0)
+        if self.output_dir is not None:
+            group = "/model={}/expert_only={}/bins={}/eq_sample_size={}/pew={}/exclude_from_test={}".format(
+                modelfile.replace("/", "_"),
+                expert_only,
+                str(bins),
+                eq_sample_size,
+                pew,
+                exclude_from_test,
+            )
+            path = os.path.join(self.zarr_store, group[1:])
+            if os.path.isdir(path) and not recompute:
+                xds = xr.open_zarr(path, consolidated=False)
+                print(f"Loading forecasts from {path}")
+                return xds
+        data_fill = self.data.ffill(axis=0)
         data_fill.loc["2022-07-01":, "RSAM"] = np.nan
         data_fill.loc["2022-07-01":, "Eqr"] = np.nan
         pipe = Pipeline(
             [
-                ("discretize", Discretizer(bins=bins, strategy="quantile", names=None)),
+                ("discretize", Discretizer(bins=bins, strategy="quantile",
+                                           names=None, factor=factor)),
                 (
                     "clf",
                     WhakaariModel(
@@ -386,43 +394,49 @@ class WhakaariForecasts(object):
                         randomize=randomize,
                         hidden_nodes=hidden_nodes,
                         modelfile=modelfile,
+                        modeldir=modeldir,
                         smoothing=smoothing,
                     ),
                 ),
             ]
         )
 
-        x_train, x_test, x_remainder, y_train, y_test, y_remainder, groups = (
-            self.get_train_test_data(data_fill, ndays=30)
+        x_train, x_test, x_remainder, y_train, y_test, y_remainder = (
+            self.get_train_test_data(data_fill)
         )
         y_train = pre_eruption_window(y_train, pew)
         y_test = pre_eruption_window(y_test, pew)
         y_all = pd.concat([y_train, y_test, y_remainder])
-        cv = SequentialGroupSplit(groups)
+        cv = SequentialGroupSplit(self.groups)
         probs = np.zeros(data_fill.shape[0])
         magma = np.zeros(data_fill.shape[0])
         seal = np.zeros(data_fill.shape[0])
         sens = np.zeros(data_fill.shape)
         disc_data = np.full(data_fill.shape, "*", dtype="<U7")
-        init = True
-        for train, test in cv.split(data_fill):
-            pipe.fit(data_fill.iloc[train], y_all.iloc[train])
-            if init:
-                probs[train] = pipe.predict_proba(data_fill.iloc[train])[:, 1]
-                magma[train] = pipe["clf"].hidden_proba_[:, 1]
-                seal[train] = pipe["clf"].hidden_proba_[:, 3]
-                init = False
-            _data_test = data_fill.copy()
-            for col in exclude_from_test:
-                _data_test[col] = np.nan
-            probs[test] = pipe.predict_proba(_data_test.iloc[test])[:, 1]
-            magma[test] = pipe["clf"].hidden_proba_[:, 1]
-            seal[test] = pipe["clf"].hidden_proba_[:, 3]
-            _sens = pd.DataFrame(pipe.score(_data_test.iloc[test]))
-            sens[test, :] = _sens.values[:]
-            disc_data[test, :] = pipe[:-1].transform(data_fill.iloc[test])
 
-        if save_trained_model:
+        if hindcast:
+            pipe.fit(data_fill, y_all)
+            probs = pipe.predict_proba(data_fill)[:, 1]
+        else:
+            init = True
+            for train, test in cv.split(data_fill):
+                pipe.fit(data_fill.iloc[train], y_all.iloc[train])
+                if init:
+                    probs[train] = pipe.predict_proba(data_fill.iloc[train])[:, 1]
+                    magma[train] = pipe["clf"].hidden_proba_[:, 1]
+                    seal[train] = pipe["clf"].hidden_proba_[:, 3]
+                    init = False
+                _data_test = data_fill.copy()
+                for col in exclude_from_test:
+                    _data_test[col] = np.nan
+                probs[test] = pipe.predict_proba(_data_test.iloc[test])[:, 1]
+                magma[test] = pipe["clf"].hidden_proba_[:, 1]
+                seal[test] = pipe["clf"].hidden_proba_[:, 3]
+                _sens = pd.DataFrame(pipe.score(_data_test.iloc[test]))
+                sens[test, :] = _sens.values[:]
+                disc_data[test, :] = pipe[:-1].transform(data_fill.iloc[test])
+
+        if self.output_dir is not None:
             trained_modelfile = modelfile.replace(".xdsl", "_trained.xdsl")
             pipe["clf"].net_.write(trained_modelfile)
 
@@ -438,159 +452,169 @@ class WhakaariForecasts(object):
                 "seal_min": (["time"], seal),
                 "seal_max": (["time"], seal),
                 "sens": (["time", "type"], sens),
-                "original_data": (["time", "type"], data.values),
+                "original_data": (["time", "type"], data_fill.values),
                 "discrete_data": (["time", "type"], disc_data),
                 "y_all": (["time"], y_all.values.squeeze()),
             },
             coords={
-                "time": data.index.tz_localize(None),
-                "type": data.columns.astype(str),
+                "time": data_fill.index.tz_localize(None),
+                "type": data_fill.columns.astype(str),
             },
         )
-        if save_trained_model:
+        if self.output_dir is not None:
             xds.to_zarr(self.zarr_store, group=group, mode="a")
         return xds
 
-    def setup_ensembles(self):
-        params_gcv = {
-            2: [(0, 10, 100), (0, 50, 100), (0, 90, 100)],
-            3: [(0, 5, 95, 100), (0, 33, 66, 100), (0, 25, 75, 100)],
-            4: [
-                (0, 25, 50, 75, 100),
-                (0, 5, 50, 95, 100),
-                (0, 10, 50, 90, 100),
-                (0, 20, 50, 80, 100),
-            ],
-            5: [(0, 20, 40, 60, 80, 100), (0, 5, 20, 80, 95, 100)],
-        }
-        return params_gcv
+    def get_best_estimator(self, search_results: dict=None):
+        if search_results is None:
+            grid_search_results_file = get_data('data/grid_search_results.csv')
+            logger.info(f"Loading search results from {grid_search_results_file}")
+            search_results = pd.read_csv(grid_search_results_file,
+                                        index_col=(0, 1, 2), converters={'params': eval})
+        best_pew, best_ns, best_params = search_results['mean_test_mod_roc_auc_no_pew'].idxmax()
+        best_estimator = search_results.loc[(best_pew, best_ns, best_params)].params
+        return best_estimator, best_pew
 
-    def ensemble_forecasts(self, pew: int = 30):
-        data = load_all_whakaari_data(
-            fill_method=None,
-            startdate=datetime(2009, 1, 1),
-            enddate=datetime.utcnow(),
-            ignore_data=("LP", "VLP"),
-            ignore_cache=True,
-            ignore_all_caches=True,
-        )
+    def get_best_forecast(self, search_results=None, exclude_from_test=(), hindcast=False):
+        best_estimator, best_pew = self.get_best_estimator(search_results)
+        xds = self.forecasts(pew=best_pew, expert_only=False, exclude_from_test=exclude_from_test,
+                        modelfile=best_estimator['clf__modelfile'],
+                        modeldir=get_data('data'),
+                        bins=best_estimator['discretize__bins'],
+                        hidden_nodes=False,
+                        uniformize=True,
+                        randomize=False, recompute=True,
+                        smoothing=30, hindcast=hindcast)
+        return xds
+
+    def sensitivity_analysis(self, factor: float=0.1, nmodels: int=100):
+        """
+        Compute sensitivity analysis by varying bin boundaries.
+
+        Parameters
+        ----------
+            factor: float
+                Factor to vary bin boundaries by. The new bin boundary will
+                be sampled from a uniform distribution between (1 - factor) * old_boundary
+                and (1 + factor) * old_boundary.
+            nmodels: int
+                Number of times to repeat sampling.
+        """
+        best_estimator, best_pew = self.get_best_estimator()
         fts = []
-        for nstates in [2, 3, 4, 5]:
-            obs_states = ["state_{:d}".format(i) for i in range(nstates)]
-            binary_states = ["no", "yes"]
-            node_names = [
-                ("eruptions", binary_states),
-                ("Eqr", obs_states),
-                ("CO2", obs_states),
-                ("RSAM", obs_states),
-                ("SO2", obs_states),
-                ("H2S", obs_states),
-            ]
-            radius = 200
-            positions = self.calculate_node_positions(
-                len(node_names), radius, (radius, radius)
-            )
-            edges = self.fully_connected([node for node, _ in node_names])
-            modelfile = os.path.join(
-                self.modelfile_dir, f"fully_connected_model_{nstates}_states.xdsl"
-            )
-            self.create_network(modelfile, node_names, positions, edges)
-            for bins in self.setup_ensembles()[nstates]:
-                xds = self.forecasts(
-                    data,
-                    pew=pew,
-                    expert_only=False,
-                    modelfile=modelfile,
-                    bins=bins,
-                    hidden_nodes=False,
-                    uniformize=True,
-                    randomize=False,
-                    recompute=True,
-                    save_trained_model=False,
-                    smoothing=30,
-                )
+        for i in tqdm(range(nmodels)):
+            xds = self.forecasts(pew=best_pew,
+                            expert_only=False, exclude_from_test=(),
+                            modelfile=best_estimator['clf__modelfile'],
+                            modeldir=get_data('data'),
+                            bins=best_estimator['discretize__bins'],
+                            hidden_nodes=False,
+                            uniformize=True,
+                            randomize=False, recompute=True,
+                            smoothing=30, factor=0.1)
+            fts.append(xds['probs'].values)
+        xds_all = xr.DataArray(np.array(fts), dims=['model', 'time'], coords={'model': np.arange(len(fts)), 'time': xds['probs'].time})
+        return xds_all
 
-                fts.append(xds["probs"].values)
+    def uncertainty_analysis(self):
+        """
+        Compute the spread of forecasts that were tested during the grid search.
+        """
+        search_results = pd.read_csv(get_data('data/grid_search_results.csv'),
+                                     index_col=(0, 1, 2), converters={'params': eval})
+        pews = search_results.index.get_level_values(0).unique()
+        nstates = search_results.index.get_level_values(1).unique()
+        fts = []
+        scores = []
+        for _nstates in tqdm(nstates):
+            for pew in tqdm(pews):
+                for _c in search_results.loc[(pew, _nstates)].iterrows():
+                    _e = _c[1].params
+                    xds = self.forecasts(pew=pew, expert_only=False,
+                                    modelfile=_e['clf__modelfile'],
+                                    modeldir=get_data('data'),
+                                    bins=_e['discretize__bins'],
+                                    hidden_nodes=False,
+                                    uniformize=True,
+                                    randomize=False, 
+                                    recompute=True,
+                                    smoothing=30)
 
-        xds_all = xr.Dataset(
-            {
-                "emean": (["datetime"], np.median(fts, axis=0)),
-                "emin": (["datetime"], np.percentile(fts, 16, axis=0)),
-                "emax": (["datetime"], np.percentile(fts, 84, axis=0)),
-            },
-            coords={
-                "datetime": xds["probs"].time.values,
-            },
-        )
-        xds_28 = xr.Dataset(
-            {
-                "emean": (
-                    ["datetime"],
-                    convert_probability(xds_all["emean"].values, pew, 28),
-                ),
-                "emin": (
-                    ["datetime"],
-                    convert_probability(xds_all["emin"].values, pew, 28),
-                ),
-                "emax": (
-                    ["datetime"],
-                    convert_probability(xds_all["emax"].values, pew, 28),
-                ),
-            },
-            coords={
-                "datetime": xds["probs"].time.values,
-            },
-        )
-        xds_91 = xr.Dataset(
-            {
-                "emean": (
-                    ["datetime"],
-                    convert_probability(xds_all["emean"].values, pew, 91),
-                ),
-                "emin": (
-                    ["datetime"],
-                    convert_probability(xds_all["emin"].values, pew, 91),
-                ),
-                "emax": (
-                    ["datetime"],
-                    convert_probability(xds_all["emax"].values, pew, 91),
-                ),
-            },
-            coords={
-                "datetime": xds["probs"].time.values,
-            },
-        )
-        st_28 = self.forecast_store.get_substore("whakaari", "28days")
-        st_28.save(xds_28, mode="w")
-        st_91 = self.forecast_store.get_substore("whakaari", "91days")
-        st_91.save(xds_91, mode="w")
-        data.index.name = "datetime"
-        data_xrd = data.to_xarray()
-        st_data = self.forecast_store.get_substore("whakaari", "data")
-        st_data.save(data_xrd, mode="w")
+                    fts.append(xds['probs'].values)
+                    scores.append(_c[1].mean_test_mod_roc_auc_no_pew)
+        xds_all = xr.DataArray(np.array(fts), dims=['model_score', 'time'], coords={'model_score': scores, 'time': xds['probs'].time})
+        return xds_all
 
+def create_networks(outputdir):
+    for nstates in range(2, 6):
+        fout = os.path.join(outputdir, f"fully_connected_model_{nstates}_states.xdsl")
+        if os.path.isfile(fout):
+            continue
+        obs_states = ["state_{:d}".format(i) for i in range(nstates)]
+        binary_states = ["no", "yes"]
+        node_names = [('eruptions', binary_states), ('Eqr', obs_states),
+                    ('CO2', obs_states), ('RSAM', obs_states),
+                    ('SO2', obs_states), ('H2S', obs_states)]
+        positions = circular_node_positions(len(node_names)) 
+        edges = fully_connected([node for node, _ in node_names])
+        create_network(fout, node_names, positions, edges) 
 
+    
 def main(argv=None):
     import argparse
 
     parser = argparse.ArgumentParser(description="Whakaari forecasts")
-    parser.add_argument(
-        "--pew",
-        type=int,
-        default=30,
-        help="Pre-eruption window length in days [default: 30]",
-    )
     parser.add_argument(
         "--outdir",
         type=str,
         default=os.path.join(os.environ["HOME"], ".cache"),
         help="Directory to store models and forecasts [default: $HOME/.cache]",
     )
-
-    args = parser.parse_args(argv)
+    parser.add_argument("--sensitivity", action="store_true", help="Run sensitivity analysis")
+    parser.add_argument("--ensemble", action="store_true", help="Run ensemble forecasts.")
+    parser.add_argument("--recompute", action="store_true", help="Recompute results even if they are up-to-date.")
+    args = parser.parse_args(argv) 
     os.makedirs(args.outdir, exist_ok=True)
-    wf = WhakaariForecasts(args.outdir)
-    wf.ensemble_forecasts(args.pew)
+    create_networks(get_data('data'))
+
+    end_date = datetime.now(tz=timezone.utc).date()
+    wf = WhakaariForecasts(start_date=datetime(2009, 1, 1), end_date=end_date)
+    latest_data_point = wf.latest_data_point()
+    forecast_store = Storage('whakaari_forecasts', args.outdir)
+    try:
+        latest_update = forecast_store('best_model', attributes_only=True)['latest_update']
+        latest_update = pd.Timestamp(latest_update)
+    except FileNotFoundError:
+        latest_update = pd.Timestamp(2009, 1, 1, tz='UTC') 
+
+    if latest_data_point > latest_update or args.recompute:
+        logger.info("Running forecasts")
+        datasets = {}
+        xds_best = wf.get_best_forecast()
+        datasets['best_model'] = (["datetime"], xds_best['probs'].data)
+        if args.sensitivity:
+            xds_sensitivity = wf.sensitivity_analysis()
+            median_sens = xds_sensitivity.median(dim='model')
+            min_sens = xds_sensitivity.chunk(dict(model=-1)).quantile(0.15, 'model')
+            max_sens = xds_sensitivity.chunk(dict(model=-1)).quantile(0.85, 'model')
+            datasets['median_sensitivity'] = (["datetime"], median_sens.data)
+            datasets['max_sensitivity'] = (["datetime"], max_sens.data)
+            datasets['min_sensitivity'] = (["datetime"], min_sens.data)
+        if args.ensemble:
+            xds_ensemble = wf.uncertainty_analysis()
+            median_ens = xds_ensemble.median('model_score')
+            min_ens = xds_ensemble.chunk(dict(model_score=-1)).quantile(0.15, 'model_score')
+            max_ens = xds_ensemble.chunk(dict(model_score=-1)).quantile(0.85, 'model_score')
+            datasets['median_ensemble'] = (["datetime"], median_ens.data)
+            datasets['max_ensemble'] = (["datetime"], max_ens.data)
+            datasets['min_ensemble'] = (["datetime"], min_ens.data)
+        xds = xr.Dataset(datasets, coords={"datetime": xds_best.time})
+        xds.attrs['latest_update'] = str(latest_data_point)
+        forecast_store.save(xds)
+        output_data = wf.data.copy()
+        output_data.index.name = 'datetime'
+        output_data.index = output_data.index.tz_localize(None)
+        forecast_store.save(output_data.to_xarray())
 
 
 if __name__ == "__main__":

@@ -6,4 +6,5 @@ __pycache__
 examples/data
 .cache
 .ipynb_checkpoints
+whakaaribn/data/*.zarr
 

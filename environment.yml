@@ -7,11 +7,10 @@ channels:
 dependencies:
     - python=3.10
     - cartopy
-    - ipdb
     - ipykernel
     - ipywidgets
     - matplotlib
-    - numpy
+    - numpy<=2.1
     - pandas
     - plotly
     - python-kaleido
@@ -19,13 +18,10 @@ dependencies:
     - scikit-learn
     - scipy
     - statsmodels
-    - requests
     - pytest
     - tqdm
-    - obspy
     - nbformat
     - nbconvert
-    - flake8
     - pytest-cov
     - pytorch
     - cpuonly
@@ -35,12 +31,8 @@ dependencies:
     - pymc
     - pip
     - pip:
-        - pyro-ppl
-        - cachier==1.5
         - schedule==1.1
-        - python-json-logger==2.0
-        - dash
-        - dash-bootstrap-components
-        - kernda
         - tonik>=0.0.10
         - owslib
+        - aitana
+        - httpx

@@ -5,14 +5,15 @@ def get_data(filename):
     return pkg_resources.resource_filename(__name__, filename)
 
 
-from .bayesnet import BayesNet
-from .data import (
-    load_all_whakaari_data,
-    load_whakaari_catalogue,
-    load_whakaari_gas,
-    load_whakaari_rsam,
-    load_whakaari_so2,
+from .bayesnet import (
+    BayesNet,
+    circular_node_positions,
+    stacked_node_positions,
+    fully_connected,
+    causal,
+    create_network
 )
+
 from .util import (
     Bin,
     BinData,
@@ -29,6 +30,7 @@ from .util import (
     moving_average,
     reindex,
 )
+
 from .forecast import (
     SequentialGroupSplit,
     WhakaariForecasts,
@@ -36,3 +38,13 @@ from .forecast import (
     get_group_labels,
     pre_eruption_window,
 )
+
+from .grid_search import (
+    grid_search,
+    get_roc_curve,
+    make_strictly_increasing,
+    evaluate_threshold,
+    compute_rates
+)
+
+from .api import Forecast

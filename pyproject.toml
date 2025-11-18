@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "whakaaribn"
@@ -11,11 +11,13 @@ authors = [
     {name = "Annemarie Christophersen", email = "a.christophersen@gns.cri.nz"}
 ]
 description = "Eruption forecasting for Whakaari/White Island using Bayesian Networks."
-license = {text = "GPL v3"}
+license = "GPL-3.0-only"
 
 [project.scripts]
 bayes_daemon = "whakaaribn.job_scheduler:main"
 whakaari_forecasts = "whakaaribn.forecast:main"
+grid_search = "whakaaribn.grid_search:main"
+whakaari_api = "whakaaribn.api:main"
 
 
 [tool.setuptools.packages]
