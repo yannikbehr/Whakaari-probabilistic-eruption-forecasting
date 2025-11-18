@@ -5,7 +5,7 @@ import schedule
 
 
 def job():
-    subprocess.run(["/env/bin/whakaari_forecasts", "--outdir", "/opt/data"])
+    subprocess.run(["/env/bin/whakaari_forecasts", "--sensitivity", "--ensemble", "--outdir", "/opt/data"])
 
 
 def main():

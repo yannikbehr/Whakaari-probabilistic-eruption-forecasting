@@ -119,7 +119,7 @@ def test_moving_average():
     assert ret.shape == (6, 3)
     ret = moving_average(a.reshape(6, 3), window_size=3, axis=1, nan=False)
     assert ret.shape == (6, 3)
-    assert np.alltrue(~np.isnan(ret))
+    assert np.all(~np.isnan(ret))
     ret = moving_average(np.arange(18), window_size=3)
     assert ret.shape == (18,)
 

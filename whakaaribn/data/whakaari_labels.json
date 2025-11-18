@@ -1,0 +1,162 @@
+[
+    {
+        "time": "2012-08-04T00:00:00",
+        "title": "Eruption",
+        "description": "Explosive eruption",
+        "tags": ["volcano", "eruption"],
+        "id": 1
+
+    },
+    {
+        "time": "2012-11-22T00:00:00",
+        "timeEnd": "2012-12-10T00:00:00",
+        "title": "Dome extrusion",
+        "description": "Dome extrusion",
+        "tags": ["volcano", "eruption"],
+        "id": 2
+
+    },
+    {
+        "time": "2013-01-15T00:00:00",
+        "timeEnd": "2013-04-10T00:00:00",
+        "title": "Geysering",
+        "description": "Geysering",
+        "tags": ["volcano", "eruption"],
+        "id": 3
+
+    },
+    {
+        "time": "2013-08-19T00:00:00",
+        "title": "Steam and mud eruption",
+        "description": "Minor steam and mud eruption",
+        "tags": ["volcano", "eruption"],
+        "id": 4
+    },
+    {
+        "time": "2013-10-04T00:00:00",
+        "title": "Steam and mud eruption",
+        "description": "Minor steam and mud eruption",
+        "tags": ["volcano", "eruption"],
+        "id": 5
+    },
+    
+    {
+        "time": "2013-10-08T00:00:00",
+        "title": "Steam and mud eruption",
+        "description": "Minor steam and mud eruption",
+        "tags": ["volcano", "eruption"],
+        "id": 6
+    },
+    {
+        "time": "2013-10-11T00:00:00",
+        "title": "Eruption",
+        "description": "Explosive eruption",
+        "tags": ["volcano", "eruption"],
+        "id": 7
+
+    },
+    {
+        "time": "2015-10-13T00:00:00",
+        "timeEnd": "2015-10-20T00:00:00",
+        "title": "Banded tremor",
+        "description": "Banded tremor",
+        "tags": ["volcano", "tremor"],
+        "id": 8
+
+    },
+    {
+        "time": "2016-04-27T00:00:00",
+        "title": "Eruption",
+        "description": "Explosive eruption",
+        "tags": ["volcano", "eruption"],
+        "id": 9
+
+    },
+    {
+        "time": "2016-09-13T00:00:00",
+        "timeEnd": "2019-09-18T00:00:00",
+        "title": "Ashing",
+        "description": "Non-explosive ash venting",
+        "tags": ["volcano", "ash"],
+        "id": 10 
+
+    },
+    {
+        "time": "2019-04-23T00:00:00",
+        "timeEnd": "2019-07-01T00:00:00",
+        "title": "Earthquake swarm",
+        "description": "Earthquake swarm",
+        "tags": ["volcano", "swarm"],
+        "id": 11 
+
+    },
+    {
+        "time": "2019-12-09T00:00:00",
+        "title": "Eruption",
+        "description": "Explosive eruption",
+        "tags": ["volcano", "eruption"],
+        "id": 12 
+
+    },
+    {
+        "time": "2019-12-23T00:00:00",
+        "timeEnd": "2019-12-29T00:00:00",
+        "title": "Ashing",
+        "description": "Minor ash emissions",
+        "tags": ["volcano", "ash"],
+        "id": 13 
+
+    },
+    {
+        "time": "2020-01-10T00:00:00",
+        "timeEnd": "2020-01-20T00:00:00",
+        "title": "Dome extrusion",
+        "description": "Dome extrusion",
+        "tags": ["volcano", "eruption"],
+        "id": 14 
+
+    },
+    {
+        "time": "2020-11-13T00:00:00",
+        "timeEnd": "2020-12-01T00:00:00",
+        "title": "Ashing",
+        "description": "Minor ash emissions",
+        "tags": ["volcano", "ash"],
+        "id": 15 
+
+    },
+    {
+        "time": "2020-12-29T00:00:00",
+        "title": "Eruption",
+        "description": "Small steam explosions",
+        "tags": ["volcano", "eruption"],
+        "id": 16 
+
+    },
+    {
+        "time": "2022-09-18T00:00:00",
+        "timeEnd": "2022-09-24T00:00:00",
+        "title": "Ashing",
+        "description": "Minor ash emissions",
+        "tags": ["volcano", "ash"],
+        "id": 17 
+
+    },
+    {
+        "time": "2024-05-24T00:00:00",
+        "title": "Eruption",
+        "description": "Small steam explosions",
+        "tags": ["volcano", "eruption"],
+        "id": 18 
+
+    },
+    {
+        "time": "2024-07-24T00:00:00",
+        "timeEnd": "2024-09-10T00:00:00",
+        "title": "Ashing",
+        "description": "Minor ash emissions",
+        "tags": ["volcano", "ash"],
+        "id": 19 
+
+    }
+]
