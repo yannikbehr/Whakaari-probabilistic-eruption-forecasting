@@ -7,7 +7,7 @@ services:
         order: start-first   
     image: ${IMAGE}
     user: ${GESSP_OP_UID}:${GESSP_OP_GID}
-    cmd: [/env/bin/bayes_daemon, --ensemble, --sensitivity, --outdir, /opt/data]
+    command: [/env/bin/bayes_daemon, --ensemble, --sensitivity, --outdir, /opt/data]
     networks:
       - portainer_web_proxy
     volumes:
@@ -20,7 +20,7 @@ services:
         order: start-first
     image: ${IMAGE}
     user: ${GESSP_OP_UID}:${GESSP_OP_GID}
-    cmd: [/env/bin/whakaari_api, --rootdir, /opt/data]
+    command: [/env/bin/whakaari_api, --rootdir, /opt/data]
     ports:
       - ${API_PORT}:8003
     networks:
