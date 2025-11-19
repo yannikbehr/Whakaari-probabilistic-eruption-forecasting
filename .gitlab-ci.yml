@@ -27,17 +27,17 @@ build:
     - DOCKER_BUILDKIT=1 docker build . -t "$IMAGE"
     - docker image push "$IMAGE"
 
-# test:
-#   tags:
-#     - linux 
-#   stage: test
-#   rules:
-#     - if: $CI_MERGE_REQUEST_ID
-#       when: never
-#     - when: always 
-#   script:
-#     - docker run --rm "$IMAGE" /env/bin/pytest --pyargs whakaaribn.tests 
-#   allow_failure: true
+test:
+  tags:
+    - linux 
+  stage: test
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+      when: never
+    - when: always 
+  script:
+    - docker run --rm "$IMAGE" /env/bin/pytest --pyargs whakaaribn.tests 
+  allow_failure: true
 
 deploy-processing:
   tags:
@@ -99,19 +99,19 @@ deploy-api:
     python3 ./gessp-operational/deploy-scripts/docker_deploy.py -a "$API_APP_NAME" -s "$APP_SERVER" -t "$TEAM" /tmp/docker_config.json
     rm /tmp/docker_config.json
 
-# build-gessp-operational:
-#   tags:
-#     - linux
-#   stage: build
-#   rules:
-#     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-#   before_script:
-#       - git clone "https://oauth2:$gitlabcicd@git.gns.cri.nz/applications/cicdutils.git"
-#   after_script:
-#       - rm -rf cicdutils
-#       - git clean -fdX
-#   script: |
-#     ./cicdutils/docker_build.sh -i "$IMAGE" -b "--build-arg D_UID=${GESSP_OP_UID} --build-arg D_GID=${GESSP_OP_GID}"
+build-gessp-operational:
+  tags:
+    - linux
+  stage: build
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  before_script:
+      - git clone "https://oauth2:$gitlabcicd@git.gns.cri.nz/applications/cicdutils.git"
+  after_script:
+      - rm -rf cicdutils
+      - git clean -fdX
+  script: |
+    ./cicdutils/docker_build.sh -i "$IMAGE" -b "--build-arg D_UID=${GESSP_OP_UID} --build-arg D_GID=${GESSP_OP_GID}"
 
 deploy-gessp-operational:
   tags:
