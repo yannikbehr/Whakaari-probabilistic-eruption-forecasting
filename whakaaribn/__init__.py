@@ -1,8 +1,23 @@
-import pkg_resources
+import importlib
+from os import PathLike
+from typing import Optional
 
 
-def get_data(filename):
-    return pkg_resources.resource_filename(__name__, filename)
+def get_data(filename: Optional[PathLike] = None) -> str:
+    """Return path to zizou package.
+
+    Parameters
+    ----------
+    filename : Pathlike, default None
+        Append `filename` to returned path.
+
+    Returns
+    -------
+    pkgdir_path
+
+    """
+    f = importlib.resources.files(__package__)
+    return str(f) if filename is None else str(f / filename)
 
 
 from .bayesnet import (
