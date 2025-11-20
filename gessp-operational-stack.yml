@@ -23,6 +23,8 @@ services:
     command: [/env/bin/whakaari_api, --rootdir, /opt/data]
     ports:
       - ${API_PORT}:8003
+    volumes:
+      - /mnt/gessp/volcano/whakaaribn:/opt/data
     networks:
       - portainer_web_proxy
         
