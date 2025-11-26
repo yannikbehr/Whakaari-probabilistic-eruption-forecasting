@@ -583,7 +583,7 @@ def main(argv=None):
     forecast_store = Storage('whakaari_forecasts', args.outdir)
     try:
         latest_update = forecast_store('best_model', metadata=True)['update_log'].values[-1]
-        latest_update = pd.Timestamp(latest_update)
+        latest_update = pd.Timestamp(latest_update, tz='UTC')
     except (KeyError, OSError):
         latest_update = pd.Timestamp(2009, 1, 1, tz='UTC') 
 
@@ -609,7 +609,6 @@ def main(argv=None):
             datasets['max_ensemble'] = (["datetime"], max_ens.data)
             datasets['min_ensemble'] = (["datetime"], min_ens.data)
         xds = xr.Dataset(datasets, coords={"datetime": xds_best.time})
-        xds.attrs['latest_update'] = str(latest_data_point)
         forecast_store.save(xds)
         output_data = wf.data.copy()
         output_data.index.name = 'datetime'
