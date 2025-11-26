@@ -584,7 +584,7 @@ def main(argv=None):
     try:
         latest_update = forecast_store('best_model', metadata=True)['update_log'].values[-1]
         latest_update = pd.Timestamp(latest_update)
-    except KeyError:
+    except (KeyError, OSError):
         latest_update = pd.Timestamp(2009, 1, 1, tz='UTC') 
 
     if latest_data_point > latest_update or args.recompute:
