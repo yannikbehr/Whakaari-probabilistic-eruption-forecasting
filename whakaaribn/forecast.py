@@ -573,7 +573,12 @@ def main(argv=None):
     parser.add_argument("--sensitivity", action="store_true", help="Run sensitivity analysis")
     parser.add_argument("--ensemble", action="store_true", help="Run ensemble forecasts.")
     parser.add_argument("--recompute", action="store_true", help="Recompute results even if they are up-to-date.")
+    parser.add_argument("--log-level", type=str, default="INFO",
+                        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                        help="Set logging level (default: INFO)")
     args = parser.parse_args(argv) 
+    logging.getLogger().setLevel(args.log_level)
+        
     os.makedirs(args.outdir, exist_ok=True)
     create_networks(get_data('data'))
 
@@ -584,7 +589,8 @@ def main(argv=None):
     try:
         latest_update = forecast_store('best_model', metadata=True)['update_log'].values[-1]
         latest_update = pd.Timestamp(latest_update, tz='UTC')
-    except (KeyError, OSError):
+    except (KeyError, OSError) as e:
+        logger.debug(f"No previous forecast data found: {e}")
         latest_update = pd.Timestamp(2009, 1, 1, tz='UTC') 
 
     if latest_data_point > latest_update or args.recompute:
@@ -614,6 +620,9 @@ def main(argv=None):
         output_data.index.name = 'datetime'
         output_data.index = output_data.index.tz_localize(None)
         forecast_store.save(output_data.to_xarray())
+    else:
+        logger.info("Forecasts are up-to-date.")
+        logger.debug(f"Latest data point: {latest_data_point}, latest update: {latest_update}")
 
 
 if __name__ == "__main__":
