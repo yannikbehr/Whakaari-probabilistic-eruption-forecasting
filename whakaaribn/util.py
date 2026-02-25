@@ -2,6 +2,7 @@ import hashlib
 import io
 import os
 from datetime import datetime
+from typing import Iterator, List, Optional, Sequence, Tuple, Union
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -61,7 +62,7 @@ def hash_dataframe(df: pd.DataFrame) -> str:
     return hash_value
 
 
-def gradient(df, period="14D"):
+def gradient(df: pd.DataFrame, period: str = "14D") -> pd.DataFrame:
     """
     Compute gradient for time series by first smoothing
     the time series and then computing the first-order difference.
@@ -79,17 +80,176 @@ def gradient(df, period="14D"):
     return df_grad
 
 
+def assign_group_labels(
+    data: pd.DataFrame,
+    eruptions: pd.Series,
+    startdate: Union[datetime, pd.Timestamp, str] = datetime(2010, 1, 1),
+    enddate: Union[datetime, pd.Timestamp, str] = datetime.utcnow(),
+    ndays: int = 30,
+    group_names: Union[Sequence[str], str] = "abcdefghijklmnopqrstuvwxyz",
+    min_interval: int = 10,
+) -> pd.DataFrame:
+    """
+    Generate group labels to split the data set by.
+
+    Parameters
+    ----------
+        startdate: Timestamp, str
+            Beginning of the time-series
+        enddate: Timestamp, str
+            End of the time-series
+        ndays: int
+            Number of days after an eruption to end
+            a group. If the time difference between
+            two eruptions is less than ndays, the
+            midpoint between the eruptions is used
+            instead.
+        group_names: iterable
+            A sequence of group labels. The sequence
+            should be at least as long as the number of
+            groups.
+        min_interval: int
+            Minimum interval between eruptions to
+            consider them separate events.
+        min_size: int
+            Minimum eruption size to consider.
+    Returns
+    -------
+        list
+            Group labels
+    """
+    dfe = eruptions.loc[startdate:]
+    dt = []
+    group_times = []
+    t_old = startdate
+    for eidx in range(1, dfe.index.size):
+        ie = dfe.index[eidx] - dfe.index[eidx - 1]
+        if ie < np.timedelta64(min_interval, "D"):
+            continue
+        dt = np.timedelta64(min(ie / 2.0, np.timedelta64(ndays, "D")), "D")
+        end = dfe.index[eidx - 1] + dt
+        group_times.append((t_old, end))
+        t_old = end
+    end = dfe.index[eidx] + np.timedelta64(ndays, "D")
+    group_times.append((t_old, end))
+    t_old = end
+    group_times.append((t_old, pd.Timestamp(enddate)))
+    dates = pd.date_range(startdate, enddate, freq="1D")
+    group_labels = []
+    for i, start_end in enumerate(group_times):
+        start, end = start_end
+        group_length = len(dates[(dates >= start) & (dates < end)])
+        group_labels += [group_names[i]] * group_length
+    group_labels.append(group_labels[-1])
+    assert len(data) == len(group_labels)
+    data_ = pd.DataFrame(data.copy())
+    data_["group"] = group_labels
+    data_["eruptions"] = dfe.reindex(dates, fill_value=0)
+    return data_
+
+
+def split_by_group(
+    data: pd.DataFrame, group: str = "e"
+) -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
+    """Split data into training and remainder based on group labels.
+    Parameters
+    ----------
+        data: pandas.DataFrame
+            Dataframe containing the data and group labels.
+        group: str
+            The group label to use for splitting.
+    Returns
+    -------
+        X_train: pandas.DataFrame
+            Training data (all groups except the specified group).
+        y_train: pandas.Series
+            Target variable for training data.
+        X_remain: pandas.DataFrame
+            Remainder data (the specified group).
+    """
+    X_train = data.drop(data[(data.group == group)].index)
+    X_train = X_train.drop(["group"], axis=1)
+    y_train = np.sign(X_train["eruptions"])
+    X_train = X_train.drop(["eruptions"], axis=1)
+    remainder = data[data["group"] == group]
+    X_remain = remainder.drop(["group", "eruptions"], axis=1)
+    y_remain = np.sign(remainder["eruptions"])
+    return X_train, y_train, X_remain, y_remain
+
+
+def pre_eruption_window(data: np.ndarray, ewin: int) -> np.ndarray:
+    """
+    Generate a time-series with pre_eruption windows.
+
+    Parameters
+    ----------
+        data: numpy.ndarray
+            Binary time-series with 1s indicating eruptions
+        ewin: int
+            Length of the pre-eruption window in days
+
+    Returns
+    -------
+    numpy.ndarray
+            The modified time-series with 1s in the pre-eruption windows.
+    """
+    data_ = np.sign(data)
+    idx = np.where(data_ == 1)[0]
+    for win_end in idx:
+        win_start = max(0, win_end - ewin + 1)
+        data_[win_start:win_end] = 1
+    return data_
+
+
+class SequentialGroupSplit:
+    def __init__(self, groups: Union[np.ndarray, pd.Series, Sequence[str]]) -> None:
+        self.groups = groups
+
+    def split(
+        self,
+        X: pd.DataFrame,
+        y: Optional[np.ndarray] = None,
+        groups: Optional[Union[np.ndarray, pd.Series, Sequence[str]]] = None,
+    ) -> Iterator[Tuple[np.ndarray, np.ndarray]]:
+        _data = X.copy()
+        conds = []
+        group_ids = np.unique(self.groups)
+        for i in range(group_ids[0:-1].size):
+            conds.append(f"(self.groups == '{group_ids[i]}')")
+            try:
+                _data_train = _data[eval("|".join(conds))]
+            except KeyError as e:
+                print(conds)
+                raise e
+            train_idx0 = _data.index.get_indexer([_data_train.index[0]])[0]
+            train_idx1 = _data.index.get_indexer([_data_train.index[-1]])[0]
+            train = np.arange(train_idx0, train_idx1 + 1)
+            _data_test = _data[self.groups == group_ids[i + 1]]
+            test_idx0 = _data.index.get_indexer([_data_test.index[0]])[0]
+            test_idx1 = _data.index.get_indexer([_data_test.index[-1]])[0]
+            test = np.arange(test_idx0, test_idx1 + 1)
+            yield train, test
+
+    def get_n_splits(
+        self,
+        X: Optional[pd.DataFrame] = None,
+        y: Optional[np.ndarray] = None,
+        groups: Optional[Union[np.ndarray, pd.Series, Sequence[str]]] = None,
+    ) -> int:
+        return np.unique(self.groups).size - 1
+
+
 def bin_data(
-    data,
-    bins,
-    strategy="quantile",
-    returnbins=False,
-    dropzeros=True,
-    limits=None,
-    names=None,
-    factor=0,
-    seed=None,
-):
+    data: np.ndarray,
+    bins: Union[int, Sequence[float], np.ndarray],
+    strategy: str = "quantile",
+    returnbins: bool = False,
+    dropzeros: bool = True,
+    limits: Optional[Sequence[float]] = None,
+    names: Optional[Sequence[str]] = None,
+    factor: float = 0,
+    seed: Optional[int] = None,
+) -> Union[np.ndarray, Tuple[np.ndarray, List[float]]]:
     """
     Bin a 1D array such that either the
     same number of observations fall within each bin or that
@@ -189,7 +349,14 @@ class Bin(object):
     :type seed: int
     """
 
-    def __init__(self, bins, names=None, unit="", factor=0, seed=None):
+    def __init__(
+        self,
+        bins: Sequence[float],
+        names: Optional[Sequence[str]] = None,
+        unit: str = "",
+        factor: float = 0,
+        seed: Optional[int] = None,
+    ) -> None:
         # determine whether bins are increasing or decreasing
         increasing = np.all(np.diff(bins) > 0)
         # now vary bin boundaries to assess uncertainty
@@ -208,7 +375,12 @@ class Bin(object):
         self.unit = unit
         self._nbins = len(self._bin_names)
 
-    def query(self, val, extrapolate=True, nanstr="*"):
+    def query(
+        self,
+        val: Union[np.ndarray, float],
+        extrapolate: bool = True,
+        nanstr: str = "*",
+    ) -> np.ndarray:
         """
         Return the bin name of the given value.
 
@@ -234,14 +406,14 @@ class Bin(object):
         return np.where(np.isnan(val), nanstr, bin_names)
 
     @property
-    def bins(self):
+    def bins(self) -> Sequence[float]:
         return self._bins
 
     @property
-    def binnames(self):
+    def binnames(self) -> Sequence[str]:
         return self._bin_names
 
-    def __str__(self):
+    def __str__(self) -> str:
         desc = ""
         for i, bn in enumerate(self.binnames):
             desc += "{:g} < {} <= {:g} {}\n".format(
@@ -283,17 +455,17 @@ class BinData(Bin):
 
     def __init__(
         self,
-        data,
-        column,
-        bins,
-        btype="freq",
-        dropzeros=True,
-        limits=None,
-        names=None,
-        unit="",
-        factor=0,
-        seed=None,
-    ):
+        data: pd.DataFrame,
+        column: str,
+        bins: Union[int, Sequence[float], np.ndarray],
+        btype: str = "freq",
+        dropzeros: bool = True,
+        limits: Optional[Sequence[float]] = None,
+        names: Optional[Sequence[str]] = None,
+        unit: str = "",
+        factor: float = 0,
+        seed: Optional[int] = None,
+    ) -> None:
         self.column = column
         self.dropzeros = dropzeros
         self.unit = unit
@@ -329,19 +501,19 @@ class BinData(Bin):
         self._df_binned = pd.DataFrame({"obs": _data, "bin": self.binned_data})
 
     @property
-    def dates(self):
+    def dates(self) -> pd.Index:
         return self._df_binned.index
 
     @property
-    def data(self):
+    def data(self) -> pd.DataFrame:
         return self._df_binned
 
-    def marginals(self, small_prob=1e-1):
+    def marginals(self, small_prob: float = 1e-1) -> List[float]:
         ntotal = self.binned_data.shape[0]
         unique, counts = np.unique(self.binned_data, return_counts=True)
         vals = counts / ntotal
         rvals = []
-        for _bn in self.binnames:
+        for _bn in self._bin_names:
             try:
                 idx = np.where(unique == _bn)[0]
                 rvals.append(float(vals[idx]))
@@ -357,7 +529,7 @@ class Discretizer(OneToOneFeatureMixin, BaseEstimator, TransformerMixin):
     """
     A sklearn compatible binning class.
 
-    >>> desc = Discretizer(bins=(0, 5, 95, 100))
+    >>> desc = Discretizer(bins=(0, 5, 95, 100), names=('low', 'medium', 'high'))
     >>> desc.fit_transform(np.tile(np.arange(5)[:, np.newaxis], (1,3)))
     array([['low', 'low', 'low'],
            ['medium', 'medium', 'medium'],
@@ -368,7 +540,7 @@ class Discretizer(OneToOneFeatureMixin, BaseEstimator, TransformerMixin):
     array([['medium', 'medium', 'medium'],
            ['medium', 'medium', 'medium'],
            ['medium', 'medium', 'medium']], dtype='<U6')
-    >>> desc = Discretizer(bins=(0, 5, 95, 100), extrapolate=False)
+    >>> desc = Discretizer(bins=(0, 5, 95, 100), names=('low', 'medium', 'high'), extrapolate=False)
     >>> desc.fit_transform(np.tile(np.arange(5)[:, np.newaxis], (1,3)))
     array([['*', '*', '*'],
            ['medium', 'medium', 'medium'],
@@ -379,28 +551,26 @@ class Discretizer(OneToOneFeatureMixin, BaseEstimator, TransformerMixin):
 
     def __init__(
         self,
-        bins=(0, 33, 66, 100),
-        names=("low", "medium", "high"),
-        strategy="quantile",
-        dropzeros=False,
-        extrapolate=True,
-        factor=0,
-    ):
+        bins: Union[int, Sequence[float], np.ndarray] = (0, 33, 66, 100),
+        strategy: str = "quantile",
+        dropzeros: bool = False,
+        extrapolate: bool = True,
+        factor: float = 0,
+    ) -> None:
         self.bins = bins
-        self.names = names
         self.strategy = strategy
         self.dropzeros = dropzeros
         self.extrapolate = extrapolate
         self.factor = factor
 
-    def fit(self, X, y=None):
+    def fit(self, X: np.ndarray, y: Optional[np.ndarray] = None) -> "Discretizer":
         X = validate_data(self, X, reset=True, ensure_all_finite="allow-nan")
         try:
             self.nbins = len(self.bins) - 1
         except TypeError:
             self.nbins = self.bins
-        if self.names is None:
-            self.names = ["state_{:d}".format(i) for i in range(self.nbins)]
+
+        self.names = np.arange(self.nbins)
         self.bin_edges_ = np.zeros((X.shape[1], self.nbins + 1))
         for col_idx in range(X.shape[1]):
             # preserve NaN indices
@@ -412,12 +582,17 @@ class Discretizer(OneToOneFeatureMixin, BaseEstimator, TransformerMixin):
                 names=self.names,
                 returnbins=True,
                 dropzeros=self.dropzeros,
-                factor=self.factor
+                factor=self.factor,
             )
         self.n_features_ = X.shape[1]
         return self
 
-    def query(self, fitted_bins, val, extrapolate=True, nanstr="*"):
+    def query(
+        self,
+        fitted_bins: Sequence[float],
+        val: np.ndarray,
+        extrapolate: bool = True,
+    ) -> np.ndarray:
         """
         Return the bin name of the given value.
 
@@ -439,14 +614,14 @@ class Discretizer(OneToOneFeatureMixin, BaseEstimator, TransformerMixin):
             else:
                 bin_idx = np.where(bin_idx < 0, self.nbins, bin_idx)
                 bin_idx = np.where(bin_idx > self.nbins - 1, self.nbins, bin_idx)
-        bin_names = np.array(list(self.names) + [nanstr])[bin_idx]
-        retval = np.where(np.isnan(val), nanstr, bin_names)
+        bin_names = np.array(list(self.names) + [np.nan])[bin_idx]
+        retval = np.where(np.isnan(val), np.nan, bin_names)
         return retval
 
-    def transform(self, X):
+    def transform(self, X: np.ndarray) -> np.ndarray:
         check_is_fitted(self, "n_features_")
         X = validate_data(self, X, reset=False, ensure_all_finite="allow-nan")
-        X_binned = np.full(X.shape, "*", "<U8")
+        X_binned = np.full(X.shape, np.nan, float)
         for col_idx in range(X.shape[1]):
             X_binned[:, col_idx] = self.query(
                 self.bin_edges_[col_idx], X[:, col_idx], extrapolate=self.extrapolate
@@ -463,18 +638,18 @@ class ForwardImputer(TransformerMixin, BaseEstimator):
            [ 2.,  5.,  3.]])
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         pass
 
-    def fit(self, X, y=None):
+    def fit(self, X: np.ndarray, y: Optional[np.ndarray] = None) -> "ForwardImputer":
         X = check_array(X, force_all_finite="allow-nan")
         self.n_features_ = X.shape[1]
         return self
 
-    def transform(self, X):
+    def transform(self, X: np.ndarray) -> np.ndarray:
         check_is_fitted(self, "n_features_")
         X = check_array(X, force_all_finite="allow-nan")
-        X_filled = np.full(X.shape, np.nan)
+        X_filled = np.full(X.shape, np.nan, float)
         for col_idx in range(X.shape[1]):
             arr = X[:, col_idx]
             prev = np.arange(len(arr))
@@ -486,15 +661,20 @@ class ForwardImputer(TransformerMixin, BaseEstimator):
 
 class ForecastImputer(TransformerMixin, BaseEstimator):
     def __init__(
-        self, sigmas, nan_limit=365, kurtosis_limit=100, fill_remaining=False, new=False
-    ):
+        self,
+        sigmas: Sequence[float],
+        nan_limit: int = 365,
+        kurtosis_limit: float = 100,
+        fill_remaining: bool = False,
+        new: bool = False,
+    ) -> None:
         self.sigmas = sigmas
         self.nan_limit = nan_limit
         self.kurtosis_limit = kurtosis_limit
         self.fill_remaining = fill_remaining
         self.new = new
 
-    def fit(self, X, y=None):
+    def fit(self, X: np.ndarray, y: Optional[np.ndarray] = None) -> "ForecastImputer":
         X = check_array(X, force_all_finite="allow-nan")
         self.n_features_ = X.shape[1]
         # create a unique filename for the imputer
@@ -505,7 +685,7 @@ class ForecastImputer(TransformerMixin, BaseEstimator):
         self.filename = os.path.join(get_data_home(), f"forecast_imputer_{hash}.npy")
         return self
 
-    def transform(self, X):
+    def transform(self, X: np.ndarray) -> np.ndarray:
         check_is_fitted(self, "n_features_")
         if not self.new:
             try:
@@ -587,7 +767,12 @@ class ForecastImputer(TransformerMixin, BaseEstimator):
         return X_filled
 
 
-def eqRate(cat, fixed_time=None, fixed_nevents=None, enddate=datetime.utcnow()):
+def eqRate(
+    cat: pd.DataFrame,
+    fixed_time: Optional[int] = None,
+    fixed_nevents: Optional[int] = None,
+    enddate: datetime = datetime.utcnow(),
+) -> pd.DataFrame:
     """
     Compute earthquake rate.
 
@@ -634,7 +819,12 @@ def eqRate(cat, fixed_time=None, fixed_nevents=None, enddate=datetime.utcnow()):
         raise ValueError("Please define either 'fixed_time' or 'fixed_nevents'")
 
 
-def reindex(df, dates, fill_method=None, ffill_interval=14):
+def reindex(
+    df: pd.DataFrame,
+    dates: pd.DatetimeIndex,
+    fill_method: Optional[str] = None,
+    ffill_interval: int = 14,
+) -> pd.Series:
     """
     Reindex and forward fill to generate a
     timeseries that can be used to set the evidence
@@ -660,7 +850,12 @@ def reindex(df, dates, fill_method=None, ffill_interval=14):
         raise ValueError(msg)
 
 
-def moving_average(X, window_size=30, axis=None, nan=True):
+def moving_average(
+    X: np.ndarray,
+    window_size: int = 30,
+    axis: Optional[int] = None,
+    nan: bool = True,
+) -> np.ndarray:
     """
     Compute the moving average of a time-series.
     >>> a = np.arange(18)
@@ -688,7 +883,7 @@ def moving_average(X, window_size=30, axis=None, nan=True):
     return ret
 
 
-def hex_to_rgb(value, alpha=1.0):
+def hex_to_rgb(value: str, alpha: float = 1.0) -> Tuple[int, int, int, float]:
     """Return (red, green, blue) for the color given as #rrggbb."""
     value = value.lstrip("#")
     lv = len(value)
@@ -697,12 +892,12 @@ def hex_to_rgb(value, alpha=1.0):
     return tuple(rgb_list)
 
 
-def rgb_to_hex(red, green, blue):
+def rgb_to_hex(red: int, green: int, blue: int) -> str:
     """Return color as #rrggbb for the given color values."""
     return "#%02x%02x%02x" % (red, green, blue)
 
 
-def get_color(idx, alpha=1.0, style="seaborn-v0_8-paper"):
+def get_color(idx: int, alpha: float = 1.0, style: str = "seaborn-v0_8-paper") -> str:
     """Return a color from the matplotlib color cycle by index.
 
     Parameters

@@ -7,46 +7,35 @@ import pytest
 
 from whakaaribn import (
     SequentialGroupSplit,
-    pre_eruption_window,
-    WhakaariForecasts
 )
+from whakaaribn.forecast import forecast, sensitivity_analysis, uncertainty_analysis
 
 
-@pytest.fixture(scope="session")
-def setup():
-    data_dir = os.path.join(
-        os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))),
-        "data",
+def test_forecasts(tmp_path, setup_simulated_data):
+    data = setup_simulated_data
+    xds = forecast(data, pew=30, bins=(0, 5, 20, 80, 95, 100), smoothing=30)
+    assert xds.probs.shape[0] == 1000
+    assert xds.probs.min() >= 0
+    assert xds.probs.max() <= 1
+
+
+def test_sensitivity_analysis(setup_real_data):
+    data = setup_real_data
+
+    xds_all = sensitivity_analysis(
+        data, pew=30, bins=(0, 5, 20, 80, 95, 100), factor=0.1, nmodels=3
     )
-    return data_dir
+    assert xds_all.shape[0] == 3
 
-
-def test_pre_eruption_window():
-    y = np.r_[np.zeros(9), 1]
-    assert 5 == np.sum(pre_eruption_window(y, 5))
-    # Make sure applying the transformation twice does not change the result
-    assert 5 == np.sum(pre_eruption_window(y, 5))
-
-
-def test_sequential_group_split():
-    groups = np.array(["a", "a", "a", "b", "b", "b", "c", "c", "c", "d", "d", "d"])
-    data = pd.DataFrame(
-        {"x": np.arange(groups.size)},
-        index=pd.date_range("2000-01-01", periods=groups.size),
-    )
-    sgs = SequentialGroupSplit(groups)
-    i = 1
-    for train, test in sgs.split(data):
-        assert train.size == i * 3
-        assert test.size == 3
-        i += 1
-    assert train.size == groups.size - 3
-    assert sgs.get_n_splits() == 3
 
 @pytest.mark.slow
-def test_whakaari_model(tmp_path_factory):
+def test_uncertainty_analysis(setup_data_dir, setup_real_data):
 
-    wf = WhakaariForecasts(args.outdir)
-    wf.ensemble_forecasts(args.pew)
-
-
+    data_dir = setup_data_dir
+    search_results_file = os.path.join(data_dir, "grid_search_results.csv")
+    search_results = pd.read_csv(
+        search_results_file, index_col=(0, 1, 2), converters={"params": eval}
+    )
+    data = setup_real_data
+    xds_uncertainty = uncertainty_analysis(data, search_results)
+    assert xds_uncertainty.shape[0] == 3

@@ -1,8 +1,6 @@
 import os
 from collections.abc import Sequence, Callable
-from datetime import datetime
 from functools import partial
-import math
 
 from aitana import whakaari
 import numpy as np
@@ -15,17 +13,11 @@ from sklearn.metrics import (roc_auc_score,
 from sklearn import set_config
 from sklearn.pipeline import Pipeline
 
-from whakaaribn import (BayesNet,
-                        Discretizer,
+from whakaaribn import (Discretizer,
                         WhakaariModel,
-                        WhakaariForecasts,
                         SequentialGroupSplit,
                         pre_eruption_window,
-                        get_data,
-                        create_network,
-                        circular_node_positions,
-                        fully_connected)
-from yaml import safe_load
+                        split_by_group)
 
 
 set_config(transform_output="pandas")
@@ -373,49 +365,36 @@ def my_roc_auc(estimator, X, y, eruptions, pew=90):
     return score
 
 
-def grid_search(params_gcv, fout=None, recompute=False, njobs=10, outputdir='data'):
+def grid_search(data, params_gcv, fout=None, recompute=False, njobs=10, outputdir='data'):
     if fout is not None and recompute is False:
         if os.path.exists(fout):
             print("Loading search results from ", fout)
             search_results = pd.read_csv(fout, index_col=(0, 1, 2), converters={'params': eval})
             return search_results
 
-    wf = WhakaariForecasts()
-    whmdl = WhakaariModel(modelfile='data/Whakaari_bn_start.xdsl', modeldir=outputdir,
-                          uniformize=True, randomize=False,
-                          hidden_nodes=False, smoothing=30)
-    pipe = Pipeline([('discretize', Discretizer(strategy='quantile', names=None)),
-                    ('clf', whmdl)])
+    pipe = Pipeline([('discretize', Discretizer()),
+                     ('clf', WhakaariModel(smoothing=30, uniformize=True))])
 
     pipe.set_output(transform="pandas")
-    cv = SequentialGroupSplit(wf.groups[wf.groups != 'e'])
-    X_train, X_test, X_remainder, y_train, y_test, y_remainder = wf.get_train_test_data()
+    cv = SequentialGroupSplit(data.group[data.group != 'e'])
+    X_train, y_train, X_remain, y_remain = split_by_group(data, group='e')
+    eruptions = whakaari.eruptions(2, '0D', end_date=data.index[-1])
     search_results = {}
     for pew in np.arange(10, 110, 10):
         print("Pre-eruption window = ", pew)
         for nstates, params in params_gcv.items():
             print("Number of states = ", nstates)
-            obs_states = ["state_{:d}".format(i) for i in range(nstates)]
-            binary_states = ["no", "yes"]
-            node_names = [('eruptions', binary_states), ('Eqr', obs_states),
-                        ('CO2', obs_states), ('RSAM', obs_states),
-                        ('SO2', obs_states), ('H2S', obs_states)]
-            positions = circular_node_positions(len(node_names)) 
-            edges = fully_connected([node for node, _ in node_names])
-            create_network(os.path.join(outputdir, f"fully_connected_model_{nstates}_states.xdsl"),
-                           node_names, positions, edges) 
             dof = np.sum(2*nstates**np.arange(1,6))
             _y_train = pre_eruption_window(y_train, pew)
-            _y_test = pre_eruption_window(y_test, pew)
             search = GridSearchCV(estimator=pipe, param_grid=[params],
                                 scoring={'average_precision': partial(ap, w=1),
                                         'aic': partial(aic, dof=dof),
                                         'log_loss': my_log_loss,
                                         'roc_auc': partial(my_auc, w=1),
-                                        'mod_roc_auc': partial(my_roc_auc, pew=pew, eruptions=wf.eruptions),
-                                        'mod_roc_auc_no_pew': partial(my_roc_auc, pew=None, eruptions=wf.eruptions)},
+                                        'mod_roc_auc': partial(my_roc_auc, pew=pew, eruptions=eruptions),
+                                        'mod_roc_auc_no_pew': partial(my_roc_auc, pew=None, eruptions=eruptions)},
                                 cv=cv, n_jobs=njobs, verbose=0, refit=False)
-            search.fit(pd.concat((X_train, X_test)).ffill(), pd.concat((_y_train, _y_test)))
+            search.fit(X_train.ffill(), _y_train)
             sdf = pd.DataFrame(search.cv_results_)
             sdf = sdf.sort_values(by=['rank_test_mod_roc_auc_no_pew'])
             search_results[(pew, nstates)] = sdf
@@ -424,34 +403,21 @@ def grid_search(params_gcv, fout=None, recompute=False, njobs=10, outputdir='dat
     search_results_combined.to_csv(fout)
     return search_results_combined
 
+def get_best_estimator(grid_search_results: str) -> tuple:
+    """Get the best estimator from the grid search results.
+    
+    Parameters
+    ----------
+    grid_search_results : str
+        Path to the grid search results CSV file.
+    Returns
+    -------
+    tuple
+        The best estimator and the corresponding pre-eruption window size.
+    """
 
-def main(argv=None):
-    """
-    Main function to run the grid search.
-    """
-    from argparse import ArgumentParser
-    parser = ArgumentParser(description="Run grid search for Whakaari BN.")
-    parser.add_argument('--params', type=str, default=None,
-                        help="Path to the parameter grid file.")
-    parser.add_argument('--outputdir', type=str, default=None, 
-                        help="Path to the output file.")
-    parser.add_argument('--recompute', action='store_true',
-                        help="Recompute the grid search.")
-    parser.add_argument('--njobs', type=int, default=10,
-                        help="Number of jobs to run in parallel.")
-    args = parser.parse_args(argv)	
-    outputdir = args.outputdir
-    if outputdir is None:
-        outputdir = get_data('data') 
-    params_file = args.params
-    if params_file is None:
-        params_file = os.path.join(outputdir, 'grid_search_params.yml')
-    with open(params_file, 'r') as f:
-        params_gcv = safe_load(f)
-    
-    fout = os.path.join(outputdir, 'grid_search_results.csv')
-    _ = grid_search(params_gcv, fout=fout, recompute=args.recompute,
-                    outputdir=outputdir, njobs=args.njobs)
-    
-if __name__ == "__main__":
-    main()
+    search_results = pd.read_csv(grid_search_results, index_col=(0, 1, 2), converters={'params': eval})
+    best_pew, best_ns, best_params = search_results['mean_test_mod_roc_auc_no_pew'].idxmax()
+    best_estimator = search_results.loc[(best_pew, best_ns, best_params)].params
+    return best_estimator['discretize__bins'], best_pew
+
