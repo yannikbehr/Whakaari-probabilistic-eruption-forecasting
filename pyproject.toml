@@ -16,6 +16,7 @@ license = {text = "GPL v3"}
 [project.scripts]
 bayes_daemon = "whakaaribn.job_scheduler:main"
 whakaari_forecasts = "whakaaribn.forecast:main"
+whakaaribn = "whakaaribn.cli:main"
 
 
 [tool.setuptools.packages]
@@ -23,7 +24,8 @@ find = {}
 
 [tool.setuptools.package-data]
 whakaaribn = ["data/*.json",
-             "data/WhiteIs_Eruption_Catalogue.csv"]
+             "data/WhiteIs_Eruption_Catalogue.csv",
+             "data/workflows/Snakefile"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

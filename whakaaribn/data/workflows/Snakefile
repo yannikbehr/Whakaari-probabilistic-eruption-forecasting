@@ -1,0 +1,19 @@
+"""
+Snakemake workflow for running the Whakaari BN benchmark.
+"""
+
+OUTDIR = config.get("outdir", ".")
+
+
+rule all:
+    input:
+        os.path.join(OUTDIR, "whakaari_forecasts.zarr"),
+
+
+rule run_forecasts:
+    output:
+        directory(os.path.join(OUTDIR, "whakaari_forecasts.zarr")),
+    params:
+        outdir=OUTDIR,
+    shell:
+        "whakaari_forecasts --outdir {params.outdir}"
