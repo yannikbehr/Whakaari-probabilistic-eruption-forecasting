@@ -23,8 +23,6 @@ def _run_snakemake(directory, check=False):
             snakefile,
             "--directory",
             directory,
-            "--config",
-            f"outdir={directory}",
             "-c1",
         ],
         check=check,

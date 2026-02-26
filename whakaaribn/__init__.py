@@ -1,18 +1,25 @@
-import pkg_resources
+import importlib
+from os import PathLike
+from typing import Optional
 
 
-def get_data(filename):
-    return pkg_resources.resource_filename(__name__, filename)
+def get_data(filename: Optional[PathLike] = None) -> str:
+    """Return path to whakaaribn package.
+
+    Parameters
+    ----------
+    filename : Pathlike, default None
+        Append `filename` to returned path.
+
+    Returns
+    -------
+    pkgdir_path
+
+    """
+    f = importlib.resources.files(__package__)
+    return str(f) if filename is None else str(f / filename)
 
 
-from .bayesnet import BayesNet
-from .data import (
-    load_all_whakaari_data,
-    load_whakaari_catalogue,
-    load_whakaari_gas,
-    load_whakaari_rsam,
-    load_whakaari_so2,
-)
 from .util import (
     Bin,
     BinData,
@@ -28,11 +35,11 @@ from .util import (
     hex_to_rgb,
     moving_average,
     reindex,
-)
-from .forecast import (
     SequentialGroupSplit,
-    WhakaariForecasts,
-    WhakaariModel,
-    get_group_labels,
-    pre_eruption_window,
+    assign_group_labels,
+    split_by_group,
+    pre_eruption_window
 )
+
+
+from whakaaribn.model import WhakaariModel

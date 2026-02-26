@@ -1,9 +1,10 @@
 [build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "whakaaribn"
+requires-python = ">= 3.11"
 version = "0.0.6"
 authors = [
     {name = "Yannik Behr", email = "y.behr@gns.cri.nz"},
@@ -11,21 +12,43 @@ authors = [
     {name = "Annemarie Christophersen", email = "a.christophersen@gns.cri.nz"}
 ]
 description = "Eruption forecasting for Whakaari/White Island using Bayesian Networks."
-license = {text = "GPL v3"}
+
+dependencies = [
+    "cartopy>=0.25.0,<0.26",
+    "ipykernel>=7.2.0,<8",
+    "matplotlib>=3.10.8,<4",
+    "numpy>=2.4.2,<3",
+    "pandas>=3.0.1,<4",
+    "scikit-learn>=1.8.0,<2",
+    "scipy>=1.17.1,<2",
+    "statsmodels>=0.14.6,<0.15",
+    "tqdm>=4.67.3,<5",
+    "nbformat>=5.10.4,<6",
+    "nbconvert>=7.17.0,<8",
+    "torch>=2.10.0,<3",
+    "aitana>=0.1.11,<0.2",
+    "snakemake>=9.16.3,<10",
+    "tonik>=0.1.21,<0.2",
+    "plotly>=6.5.2,<7",
+    "kaleido>=1.2.0,<2",
+    "papermill>=2.6.0,<3"]
+
+[project.optional-dependencies]
+dev = ["pytest>=9.0.2,<10",
+       "httpx>=0.28.1,<0.29",
+       "ipdb>=0.13.13,<0.14"]
 
 [project.scripts]
-bayes_daemon = "whakaaribn.job_scheduler:main"
-whakaari_forecasts = "whakaaribn.forecast:main"
+bayes_daemon = "whakaaribn.cli:main"
+whakaari_api = "whakaaribn.api:main"
 whakaaribn = "whakaaribn.cli:main"
-
 
 [tool.setuptools.packages]
 find = {}
 
 [tool.setuptools.package-data]
 whakaaribn = ["data/*.json",
-             "data/WhiteIs_Eruption_Catalogue.csv",
-             "data/workflows/Snakefile"]
+             "data/WhiteIs_Eruption_Catalogue.csv"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
