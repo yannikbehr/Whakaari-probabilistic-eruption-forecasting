@@ -4,11 +4,7 @@
 	"name": "whakaari-bn-dev",
 	"build": {
 		"dockerfile": "../Dockerfile",
-		"context": "..",
-		"args":{
-			"D_UID": "${localEnv:D_UID}",
-			"D_GID": "${localEnv:D_GID}"
-		} 
+		"context": ".."
 	},
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
@@ -17,14 +13,15 @@
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	//"forwardPorts": [8050],
 	// Use 'postCreateCommand' to run commands after the container is created.
-	"postCreateCommand": "/env/bin/pip install -e .",
+	"postCreateCommand": "pip3 install -e '.[dev]'",
 
 	"customizations": {
 		"vscode": {
 			"extensions": [
 				"ms-python.python",
 				"ms-toolsai.jupyter",
-				"astral-sh.ruff"
+				"charliermarsh.ruff",
+				"snakemake.snakemake-lang"
 			]
 		}
 	}

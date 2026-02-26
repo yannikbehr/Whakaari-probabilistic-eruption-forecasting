@@ -12,11 +12,12 @@ from whakaaribn import (
     Discretizer,
     ForecastImputer,
     convert_probability,
-    eqRate,
     get_color,
     hash_dataframe,
     hex_to_rgb,
     moving_average,
+    SequentialGroupSplit,
+    pre_eruption_window
 )
 
 
@@ -102,13 +103,24 @@ def test_discretizer():
     desc = Discretizer(bins=(0, 5, 95, 100))
     rv = desc.fit_transform(np.tile(np.arange(5)[:, np.newaxis], (1, 3)))
     np.testing.assert_equal(
-        rv.iloc[:, 1].values, np.array(["low", "medium", "medium", "medium", "high"])
+        rv.iloc[:, 1].values, np.array([0, 1, 1, 1, 2])
     )
     assert type(rv) == pd.core.frame.DataFrame
     desc1 = Discretizer(bins=(0, 5, 95, 100)).set_output(transform="pandas")
     rv1 = desc1.fit_transform(df)
     assert type(rv1) == pd.core.frame.DataFrame
-    assert rv1.columns[0] == "RSAM"
+    desc = Discretizer(bins=(0, 5, 95, 100), names=('low', 'medium', 'high'))
+    rv = desc.fit_transform(np.tile(np.arange(5)[:, np.newaxis], (1, 3)))
+    np.testing.assert_equal(
+        rv.iloc[:, 1].values, np.array(['low', 'medium', 'medium', 'medium', 'high'])
+    )
+
+    desc = Discretizer(bins=[0, 20, 40, 60, 80, 100])
+    rv = desc.fit_transform(np.tile(np.arange(5)[:, np.newaxis], (1, 3)))
+    np.testing.assert_equal(
+        rv.iloc[:, 0].values, np.array([0, 1, 2, 3, 4])
+    )   
+ 
 
 
 def test_moving_average():
@@ -119,7 +131,7 @@ def test_moving_average():
     assert ret.shape == (6, 3)
     ret = moving_average(a.reshape(6, 3), window_size=3, axis=1, nan=False)
     assert ret.shape == (6, 3)
-    assert np.alltrue(~np.isnan(ret))
+    assert np.all(~np.isnan(ret))
     ret = moving_average(np.arange(18), window_size=3)
     assert ret.shape == (18,)
 
@@ -156,3 +168,28 @@ def test_convert_probability():
     np.testing.assert_array_almost_equal(result, expected, decimal=3)
     result1 = convert_probability(result, hnew, hin)
     np.testing.assert_array_almost_equal(result1, prob, decimal=3)
+
+
+def test_sequential_group_split():
+    groups = np.array(["a", "a", "a", "b", "b", "b", "c", "c", "c", "d", "d", "d"])
+    data = pd.DataFrame(
+        {"x": np.arange(groups.size)},
+        index=pd.date_range("2000-01-01", periods=groups.size),
+    )
+    sgs = SequentialGroupSplit(groups)
+    i = 1
+    for train, test in sgs.split(data):
+        assert train.size == i * 3
+        assert test.size == 3
+        i += 1
+    assert i == 4
+    assert train.size == groups.size - 3
+    assert sgs.get_n_splits() == 3
+
+
+def test_pre_eruption_window():
+    y = np.r_[np.zeros(9), 1]
+    assert 5 == np.sum(pre_eruption_window(y, 5))
+    # Make sure applying the transformation twice does not change the result
+    assert 5 == np.sum(pre_eruption_window(y, 5))
+

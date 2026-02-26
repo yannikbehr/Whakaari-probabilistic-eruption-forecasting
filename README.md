@@ -27,7 +27,7 @@ pip install --index-url https://support.bayesfusion.com/pysmile-B/ pysmile
 Next obtain a license from [BayesFusion](https://www.bayesfusion.com/).
 Academic users can obtain a free license, all other users can get a 30-day evaluation license
 here: (https://download.bayesfusion.com/files.html?category=Business).
-Once you have unzipped the package with license files run the following command to copy the license key to the correct place:
+Once you have unzipped the package with license files, run the following command to copy the license key to the correct place:
 
 ```
 cp pysmile_license.py $(python -c "import site; print(site.getsitepackages()[0]))

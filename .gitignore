@@ -6,4 +6,15 @@ __pycache__
 examples/data
 .cache
 .ipynb_checkpoints
+whakaaribn/data/*.zarr
+*.snakemake
+whakaaribn/data/workflows/plots
+whakaaribn/data/workflows/data
+whakaaribn/data/workflows/forecasts
+whakaaribn/data/workflows/results
+whakaaribn/data/workflows/logs
+*Thumbs.db
+examples
+sandbox.ipynb
+whakaaribn/data/RSAM_NZ.WIZ.10.HHZ.csv
 
