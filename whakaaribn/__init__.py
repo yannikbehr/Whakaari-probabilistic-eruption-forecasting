@@ -4,7 +4,7 @@ from typing import Optional
 
 
 def get_data(filename: Optional[PathLike] = None) -> str:
-    """Return path to zizou package.
+    """Return path to whakaaribn package.
 
     Parameters
     ----------

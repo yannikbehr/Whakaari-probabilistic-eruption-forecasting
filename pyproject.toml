@@ -39,8 +39,9 @@ dev = ["pytest>=9.0.2,<10",
        "ipdb>=0.13.13,<0.14"]
 
 [project.scripts]
-bayes_daemon = "whakaaribn.job_scheduler:main"
+bayes_daemon = "whakaaribn.cli:main"
 whakaari_api = "whakaaribn.api:main"
+whakaaribn = "whakaaribn.cli:main"
 
 [tool.setuptools.packages]
 find = {}
