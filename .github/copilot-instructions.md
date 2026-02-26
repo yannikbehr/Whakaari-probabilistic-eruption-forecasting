@@ -11,17 +11,16 @@ The main Python package is `whakaaribn`.
 ### Prerequisites
 
 - Python 3.11 or higher
-- A conda environment is recommended (see `README.md`)
 
 ### Install dependencies
 
 ```bash
-conda env create -f environment.yml
+conda create -n whakaaribn
 conda activate whakaaribn
 pip install -e ".[dev]"
 ```
 
-### PYSMILE library (required for Bayesian Network inference)
+### PYSMILE library (optional dependency for Bayesian Network inference)
 
 ```bash
 pip install --index-url https://support.bayesfusion.com/pysmile-B/ pysmile
