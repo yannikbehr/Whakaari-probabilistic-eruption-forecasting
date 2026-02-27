@@ -1,14 +1,12 @@
-from datetime import timedelta, datetime
 import io
 import json
 from typing import Optional
 
-from tonik.api import TonikAPI
 import numpy as np
 import pandas as pd
-from starlette.responses import StreamingResponse
-from fastapi.responses import StreamingResponse
 import uvicorn
+from fastapi.responses import StreamingResponse
+from tonik.api import TonikAPI
 
 from whakaaribn import convert_probability, get_data
 
@@ -23,26 +21,28 @@ async def get_df_from_streaming_response(response: StreamingResponse) -> pd.Data
     # Convert to DataFrame using StringIO
     df = pd.read_csv(io.StringIO(body))
     return df
- 
+
+
 class Forecast(TonikAPI):
     def __init__(self, rootdir):
-        super().__init__(rootdir) # Give a name to the model
+        super().__init__(rootdir)  # Give a name to the model
         self.app.get("/forecast")(self.forecast)
         self.app.get("/labels")(self.labels)
-    
+
     async def forecast(self, name: str, starttime: str, endtime: str, horizon: int = 91):
         probs = await self.feature(group='whakaari_forecasts',
                                    name=name,
                                    starttime=starttime,
                                    endtime=endtime)
-        probs = await get_df_from_streaming_response(probs)                   
+        probs = await get_df_from_streaming_response(probs)
         probs['feature'] = convert_probability(probs['feature'].interpolate().values,
                                                40, horizon)
         output = probs.to_csv(index=False, columns=['dates', 'feature'])
-        return StreamingResponse(iter([output]), 
+        return StreamingResponse(iter([output]),
                                  media_type='text/csv',
                                  headers={'Content-Disposition': 'attachment; filename="feature.csv"',
                                  'Content-Length': str(len(output))})
+
     async def labels(self, starttime: Optional[str] = None, endtime: Optional[str] = None):
         if starttime is not None:
             _st = self.preprocess_datetime(starttime)
@@ -53,13 +53,14 @@ class Forecast(TonikAPI):
             labels = json.load(f)
         new_labels = []
         for label in labels:
-            ntime = np.datetime64(label['time']).astype('datetime64[ms]') 
+            ntime = np.datetime64(label['time']).astype('datetime64[ms]')
             if starttime is not None and endtime is not None:
                 if ntime < _st or ntime > _et:
                     continue
             label['time'] = int(ntime.astype(int))
             try:
-                ntimeEnd = np.datetime64(label['timeEnd']).astype('datetime64[ms]').astype(int) 
+                ntimeEnd = np.datetime64(label['timeEnd']).astype(
+                    'datetime64[ms]').astype(int)
                 label['timeEnd'] = int(ntimeEnd)
             except KeyError:
                 pass
@@ -74,6 +75,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     fc = Forecast(args.rootdir)
     uvicorn.run(fc.app, host="0.0.0.0", port=8003)
+
 
 if __name__ == "__main__":
     main()

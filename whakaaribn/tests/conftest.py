@@ -25,13 +25,15 @@ def pytest_addoption(parser):
 
 
 def pytest_configure(config):
-    config.addinivalue_line("markers", "webservice: mark tests that test webserivces")
+    config.addinivalue_line(
+        "markers", "webservice: mark tests that test webserivces")
     config.addinivalue_line("markers", "slow: mark test as slow to run")
 
 
 def pytest_collection_modifyitems(config, items):
     if not config.getoption("--runwebservice"):
-        skip_webservice = pytest.mark.skip(reason="need --runwebservice option to run")
+        skip_webservice = pytest.mark.skip(
+            reason="need --runwebservice option to run")
         for item in items:
             if "webservice" in item.keywords:
                 item.add_marker(skip_webservice)
@@ -72,7 +74,7 @@ def setup(tmp_path_factory):
 @pytest.fixture()
 def setup_api(setup):
     savedir, g = setup
-    from whakaaribn import Forecast
+    from whakaaribn.api import Forecast
 
     ta = Forecast(str(savedir))
     client = TestClient(ta.app)
@@ -86,7 +88,8 @@ def setup_simulated_data():
     ml = WhakaariModel(randomize=True, seed=42)
     data = ml.simulate(n_samples=1000, mode="continuous")
     # assign groups 'a' to 'e' to the data, each group has 200 samples
-    data["group"] = ["a"] * 200 + ["b"] * 200 + ["c"] * 200 + ["d"] * 200 + ["e"] * 200
+    data["group"] = ["a"] * 200 + ["b"] * 200 + \
+        ["c"] * 200 + ["d"] * 200 + ["e"] * 200
     return data
 
 
@@ -116,7 +119,8 @@ def setup_real_data():
 @pytest.fixture()
 def setup_data_dir():
     data_dir = os.path.join(
-        os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))),
+        os.path.dirname(os.path.abspath(
+            inspect.getfile(inspect.currentframe()))),
         "data",
     )
     return data_dir

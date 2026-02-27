@@ -1,3 +1,23 @@
+from .util import (
+    Bin,
+    BinData,
+    Discretizer,
+    ForecastImputer,
+    ForwardImputer,
+    SequentialGroupSplit,
+    assign_group_labels,
+    bin_data,
+    convert_probability,
+    eqRate,
+    get_color,
+    gradient,
+    hex_to_rgb,
+    moving_average,
+    pre_eruption_window,
+    reindex,
+    split_by_group,
+)
+from whakaaribn.model import WhakaariModel
 import importlib
 from os import PathLike
 from typing import Optional
@@ -18,28 +38,3 @@ def get_data(filename: Optional[PathLike] = None) -> str:
     """
     f = importlib.resources.files(__package__)
     return str(f) if filename is None else str(f / filename)
-
-
-from .util import (
-    Bin,
-    BinData,
-    Discretizer,
-    ForecastImputer,
-    ForwardImputer,
-    bin_data,
-    convert_probability,
-    eqRate,
-    get_color,
-    gradient,
-    hash_dataframe,
-    hex_to_rgb,
-    moving_average,
-    reindex,
-    SequentialGroupSplit,
-    assign_group_labels,
-    split_by_group,
-    pre_eruption_window
-)
-
-
-from whakaaribn.model import WhakaariModel

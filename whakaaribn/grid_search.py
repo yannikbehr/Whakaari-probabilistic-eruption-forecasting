@@ -1,28 +1,28 @@
 import os
-from collections.abc import Sequence, Callable
+from collections.abc import Callable, Sequence
 from functools import partial
 
-from aitana import whakaari
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import (roc_auc_score,
-                             log_loss,
-                             average_precision_score,
-                             auc)
+from aitana import whakaari
 from sklearn import set_config
+from sklearn.metrics import auc, average_precision_score, log_loss, roc_auc_score
+from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
 
-from whakaaribn import (Discretizer,
-                        WhakaariModel,
-                        SequentialGroupSplit,
-                        pre_eruption_window,
-                        split_by_group)
-
+from whakaaribn import (
+    Discretizer,
+    SequentialGroupSplit,
+    WhakaariModel,
+    pre_eruption_window,
+    split_by_group,
+)
 
 set_config(transform_output="pandas")
 
 # Validation Functions
+
+
 def get_evaluation_windows(starttime, endtime, pew):
     """
     Get the evaluation windows for the forecasted rates.
@@ -53,9 +53,9 @@ def get_evaluation_windows(starttime, endtime, pew):
         tstart = e[0] + pd.Timedelta(days=30)
     negative_windows.append((tstart, endtime))
     return positive_windows, negative_windows
- 
 
-def compute_rates(model: pd.DataFrame, pew: int, debug: bool=False):
+
+def compute_rates(model: pd.DataFrame, pew: int, debug: bool = False):
     """
     Compute the forecasted rates for positive and negative windows.
 
@@ -70,8 +70,9 @@ def compute_rates(model: pd.DataFrame, pew: int, debug: bool=False):
     Returns:
     --------
         dict: The forecasted rates for positive and negative windows as well as the overall rate.
-    """ 
-    positive_windows, negative_windows = get_evaluation_windows(model.index[0], model.index[-1], pew)
+    """
+    positive_windows, negative_windows = get_evaluation_windows(
+        model.index[0], model.index[-1], pew)
     positive_rates = []
     for win_start, win_end in positive_windows:
         tmp_model = model.loc[win_start:win_end]
@@ -92,20 +93,22 @@ def compute_rates(model: pd.DataFrame, pew: int, debug: bool=False):
 
     yearly_scale = 365.25/pew
     pos_mean = np.mean(positive_rates) * yearly_scale
-    pos_sem = np.std(positive_rates) / np.sqrt(len(positive_rates)) * yearly_scale
+    pos_sem = np.std(positive_rates) / \
+        np.sqrt(len(positive_rates)) * yearly_scale
     neg_mean = np.mean(negative_rates) * yearly_scale
-    neg_sem = np.std(negative_rates) / np.sqrt(len(negative_rates)) * yearly_scale
+    neg_sem = np.std(negative_rates) / \
+        np.sqrt(len(negative_rates)) * yearly_scale
     overall_rate = np.mean(-np.log(1-model)) * yearly_scale
     overall_sem = np.std(-np.log(1-model)) / np.sqrt(len(model)) * yearly_scale
-   
+
     return dict(positive_rates=(pos_mean, pos_sem), negative_rates=(neg_mean, neg_sem),
-                overall_rate=(overall_rate, overall_sem)) 
+                overall_rate=(overall_rate, overall_sem))
 
 
 def evaluate_threshold(thresh: float, model: pd.DataFrame,
                        explosive_eruptions: pd.DataFrame,
-                       debug: bool=False, pew: int=90,
-                       return_windows: bool=False):
+                       debug: bool = False, pew: int = 90,
+                       return_windows: bool = False):
     """
     Evaluate the number of true positives, false positives, true negatives and false negatives for a given threshold.
 
@@ -132,7 +135,8 @@ def evaluate_threshold(thresh: float, model: pd.DataFrame,
     except TypeError:
         pass
 
-    starttime = max(pd.Timestamp(model.index[0]), pd.Timestamp('2013-01-01', tz='UTC'))
+    starttime = max(pd.Timestamp(
+        model.index[0]), pd.Timestamp('2013-01-01', tz='UTC'))
     endtime = pd.Timestamp(model.index[-1])
     model = model.loc[starttime:endtime]
     explosive_eruptions = explosive_eruptions.loc[starttime:endtime]
@@ -142,9 +146,9 @@ def evaluate_threshold(thresh: float, model: pd.DataFrame,
     bin_model = np.where(model >= thresh, 1, 0)
     if len(bin_model.shape) > 1:
         bin_model = bin_model[0]
-    # assign data on eruption days to the value on the day before 
+    # assign data on eruption days to the value on the day before
     eidx = np.where(np.isin(model.index, explosive_eruptions.index))[0]
-    bin_model[eidx] = bin_model[eidx - 1] 
+    bin_model[eidx] = bin_model[eidx - 1]
     negative_windows = []
     positive_windows = []
     first_day = 0
@@ -193,7 +197,8 @@ def evaluate_threshold(thresh: float, model: pd.DataFrame,
                     true_negatives -= fn_
                 else:
                     true_positives += (win_end - win_start + 1)
-                    windows.append(dict(start=date_start, end=date_end, type='true_positive'))
+                    windows.append(
+                        dict(start=date_start, end=date_end, type='true_positive'))
                 if debug:
                     print('Eruption in positive window: ', date_start, date_end)
                 # stop if there is at least one eruption in the window
@@ -201,7 +206,8 @@ def evaluate_threshold(thresh: float, model: pd.DataFrame,
                 break
         if not explosion_in_window:
             false_positives += (win_end - win_start + 1)
-            windows.append(dict(start=date_start, end=date_end, type='false_positive'))
+            windows.append(
+                dict(start=date_start, end=date_end, type='false_positive'))
 
     if debug:
         print('Negative windows:')
@@ -225,31 +231,36 @@ def evaluate_threshold(thresh: float, model: pd.DataFrame,
                     false_negatives += fn_
                 else:
                     false_negatives += (win_end - win_start + 1)
-                    # if window ends later than 09/01/2020 count the 
+                    # if window ends later than 09/01/2020 count the
                     # days between that date and the window end date as true negatives
                     # as the last explosive eruption was on 09/12/2019
                     if date_end > pd.Timestamp('2020-01-09', tz='UTC'):
-                        diff = (date_end - pd.Timestamp('2020-01-09', tz='UTC')).days
+                        diff = (
+                            date_end - pd.Timestamp('2020-01-09', tz='UTC')).days
                         true_negatives += diff
                         false_negatives -= diff
-                        windows.append(dict(start=date_start, end=date_end - pd.Timedelta(days=diff), type='false_negative'))
-                        windows.append(dict(start=date_end - pd.Timedelta(days=diff-1), end=date_end, type='true_negative'))
+                        windows.append(dict(
+                            start=date_start, end=date_end - pd.Timedelta(days=diff), type='false_negative'))
+                        windows.append(dict(
+                            start=date_end - pd.Timedelta(days=diff-1), end=date_end, type='true_negative'))
                     else:
-                        windows.append(dict(start=date_start, end=date_end, type='false_negative'))
+                        windows.append(
+                            dict(start=date_start, end=date_end, type='false_negative'))
                 if debug:
                     print('Eruption in negative window: ', date_start, date_end)
                 # stop if there is at least one eruption in the window
-                explosion_in_window = True 
+                explosion_in_window = True
                 break
         if not explosion_in_window:
             true_negatives += (win_end - win_start + 1)
-            windows.append(dict(start=date_start, end=date_end, type='true_negative'))
+            windows.append(
+                dict(start=date_start, end=date_end, type='true_negative'))
     if return_windows:
         return dict(tp=true_positives, fp=false_positives, tn=true_negatives, fn=false_negatives), windows
     return dict(tp=true_positives, fp=false_positives, tn=true_negatives, fn=false_negatives)
 
 
-def get_roc_curve(model: pd.DataFrame, thresholds: list, func: Callable, debug: bool=False):
+def get_roc_curve(model: pd.DataFrame, thresholds: list, func: Callable, debug: bool = False):
     """
     Compute the ROC curve for a given model and thresholds.
 
@@ -277,8 +288,10 @@ def get_roc_curve(model: pd.DataFrame, thresholds: list, func: Callable, debug: 
             fpr_ = result['fp']/(result['fp'] + result['tn'])
             prec_ = result['tp']/(result['tp'] + result['fp'])
         except ZeroDivisionError:
-            print("Threshold: ", thresh, "True positives: ", result['tp'], "False negatives: ", result['fn'])
-            print("Threshold: ", thresh, "True negatives: ", result['tn'], "False positives: ", result['fp'])
+            print("Threshold: ", thresh, "True positives: ",
+                  result['tp'], "False negatives: ", result['fn'])
+            print("Threshold: ", thresh, "True negatives: ",
+                  result['tn'], "False positives: ", result['fp'])
             continue
         # start the evaluation from the first correct alerts
         if result['tp'] == 0:
@@ -311,14 +324,14 @@ def make_strictly_increasing(sequence: Sequence) -> Sequence:
     """
     # Make a copy to avoid modifying the original list
     result = sequence
-    
+
     # Iterate through the sequence starting from the second element
     for i in range(1, len(result)):
         # If the current element is not greater than the previous one
         if result[i] <= result[i - 1]:
             # Increment the current element to be greater than the previous one
             result[i] = result[i - 1]
-    
+
     return result
 
 
@@ -327,7 +340,7 @@ def ap(estimator, X, y, w=1):
     weights = np.where(y == 1, w, 1)
     score = average_precision_score(y, prob_e[:, 1], sample_weight=weights,
                                     average='weighted')
-    return score 
+    return score
 
 
 def aic(estimator, X, y, dof=1):
@@ -350,8 +363,8 @@ def my_auc(estimator, X, y, w=1):
     prob_e = estimator.predict_proba(X)
     weights = np.where(y == 1, w, 1)
     score = roc_auc_score(y, prob_e[:, 1], sample_weight=weights,
-                                    average='weighted')
-    return score 
+                          average='weighted')
+    return score
 
 
 def my_roc_auc(estimator, X, y, eruptions, pew=90):
@@ -360,16 +373,17 @@ def my_roc_auc(estimator, X, y, eruptions, pew=90):
     mdl = pd.Series(prob_e[:, 1], index=X.index)
     assert mdl.shape[0] > 0
     tpr_bn, fpr_bn, precision_bn = get_roc_curve(mdl, thresholds, partial(evaluate_threshold, pew=pew,
-                                                                          explosive_eruptions=eruptions))  
+                                                                          explosive_eruptions=eruptions))
     score = auc(make_strictly_increasing(fpr_bn), tpr_bn)
     return score
 
 
-def grid_search(data, params_gcv, fout=None, recompute=False, njobs=10, outputdir='data'):
+def grid_search(data, params_gcv, fout=None, recompute=False, njobs=10, pews=np.arange(10, 110, 10)):
     if fout is not None and recompute is False:
         if os.path.exists(fout):
             print("Loading search results from ", fout)
-            search_results = pd.read_csv(fout, index_col=(0, 1, 2), converters={'params': eval})
+            search_results = pd.read_csv(fout, index_col=(
+                0, 1, 2), converters={'params': eval})
             return search_results
 
     pipe = Pipeline([('discretize', Discretizer()),
@@ -380,32 +394,34 @@ def grid_search(data, params_gcv, fout=None, recompute=False, njobs=10, outputdi
     X_train, y_train, X_remain, y_remain = split_by_group(data, group='e')
     eruptions = whakaari.eruptions(2, '0D', end_date=data.index[-1])
     search_results = {}
-    for pew in np.arange(10, 110, 10):
+    for pew in pews:
         print("Pre-eruption window = ", pew)
         for nstates, params in params_gcv.items():
             print("Number of states = ", nstates)
-            dof = np.sum(2*nstates**np.arange(1,6))
+            dof = np.sum(2*nstates**np.arange(1, 6))
             _y_train = pre_eruption_window(y_train, pew)
             search = GridSearchCV(estimator=pipe, param_grid=[params],
-                                scoring={'average_precision': partial(ap, w=1),
-                                        'aic': partial(aic, dof=dof),
-                                        'log_loss': my_log_loss,
-                                        'roc_auc': partial(my_auc, w=1),
-                                        'mod_roc_auc': partial(my_roc_auc, pew=pew, eruptions=eruptions),
-                                        'mod_roc_auc_no_pew': partial(my_roc_auc, pew=None, eruptions=eruptions)},
-                                cv=cv, n_jobs=njobs, verbose=0, refit=False)
+                                  scoring={'average_precision': partial(ap, w=1),
+                                           'aic': partial(aic, dof=dof),
+                                           'log_loss': my_log_loss,
+                                           'roc_auc': partial(my_auc, w=1),
+                                           'mod_roc_auc': partial(my_roc_auc, pew=pew, eruptions=eruptions),
+                                           'mod_roc_auc_no_pew': partial(my_roc_auc, pew=None, eruptions=eruptions)},
+                                  cv=cv, n_jobs=njobs, verbose=0, refit=False)
             search.fit(X_train.ffill(), _y_train)
             sdf = pd.DataFrame(search.cv_results_)
             sdf = sdf.sort_values(by=['rank_test_mod_roc_auc_no_pew'])
             search_results[(pew, nstates)] = sdf
-    
-    search_results_combined = pd.concat(search_results, names=['pew', 'nstates'])
+
+    search_results_combined = pd.concat(
+        search_results, names=['pew', 'nstates'])
     search_results_combined.to_csv(fout)
     return search_results_combined
 
+
 def get_best_estimator(grid_search_results: str) -> tuple:
     """Get the best estimator from the grid search results.
-    
+
     Parameters
     ----------
     grid_search_results : str
@@ -416,8 +432,10 @@ def get_best_estimator(grid_search_results: str) -> tuple:
         The best estimator and the corresponding pre-eruption window size.
     """
 
-    search_results = pd.read_csv(grid_search_results, index_col=(0, 1, 2), converters={'params': eval})
-    best_pew, best_ns, best_params = search_results['mean_test_mod_roc_auc_no_pew'].idxmax()
-    best_estimator = search_results.loc[(best_pew, best_ns, best_params)].params
+    search_results = pd.read_csv(grid_search_results, index_col=(
+        0, 1, 2), converters={'params': eval})
+    best_pew, best_ns, best_params = search_results['mean_test_mod_roc_auc_no_pew'].idxmax(
+    )
+    best_estimator = search_results.loc[(
+        best_pew, best_ns, best_params)].params
     return best_estimator['discretize__bins'], best_pew
-

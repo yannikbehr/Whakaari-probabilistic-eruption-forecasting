@@ -31,7 +31,8 @@ class WhakaariModel(BaseEstimator):
         self.randomize = randomize
         self.uniformize = uniformize
         if self.randomize and self.uniformize:
-            raise ValueError("Can't randomize and uniformize at the same time.")
+            raise ValueError(
+                "Can't randomize and uniformize at the same time.")
         self.nstates = nstates
         self.debug = debug
         self.seed = seed
@@ -53,7 +54,8 @@ class WhakaariModel(BaseEstimator):
             G.add_node(node_name, states=states)
         for i in range(len(cardinality) - 1):
             for j in range(i + 1, len(cardinality)):
-                G.add_edge(list(cardinality.keys())[i], list(cardinality.keys())[j])
+                G.add_edge(list(cardinality.keys())[
+                           i], list(cardinality.keys())[j])
         model = DiscreteBayesianNetwork(G)
         cpds = self._init_cpds(model, cardinality)
         if len(cpds) > 0:
@@ -70,7 +72,8 @@ class WhakaariModel(BaseEstimator):
             parents = model.get_parents(node)
             if len(parents) < 1:
                 if self.uniformize:
-                    cpds[node] = TabularCPD.get_uniform(node, cardinality=cardinality)
+                    cpds[node] = TabularCPD.get_uniform(
+                        node, cardinality=cardinality)
                 elif self.randomize:
                     cpds[node] = TabularCPD.get_random(
                         node, cardinality=cardinality, seed=self.seed
@@ -137,13 +140,20 @@ class WhakaariModel(BaseEstimator):
             return data_cont
 
     def predict_proba(self, X):
+        if not hasattr(self, "model"):
+            if self.modelfile is not None and os.path.isfile(self.modelfile):
+                reader = BIFReader(self.modelfile)
+                self.model = reader.get_model(state_name_type=int)
+            else:
+                raise ValueError("Model not fitted or modelfile not found.")
         proba = self.model.predict_probability(X).values
         if self.smoothing is not None:
-            proba = moving_average(proba, window_size=self.smoothing, axis=0, nan=False)
+            proba = moving_average(
+                proba, window_size=self.smoothing, axis=0, nan=False)
         return proba
 
     def predict(self, X):
-        return self.predict(X)
+        return self.predict_proba(X)
 
     def __str__(self):
         parts = []

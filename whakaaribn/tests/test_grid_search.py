@@ -2,6 +2,7 @@ import os
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from whakaaribn.grid_search import (
     evaluate_threshold,
@@ -13,7 +14,8 @@ from whakaaribn.grid_search import (
 
 def test_make_strictly_increasing():
     seq = [0.1, 0.2, 0.3, 0.4, 0.2, 0.6, 0.7, 0.5, 1]
-    assert make_strictly_increasing(seq) == [0.1, 0.2, 0.3, 0.4, 0.4, 0.6, 0.7, 0.7, 1]
+    assert make_strictly_increasing(
+        seq) == [0.1, 0.2, 0.3, 0.4, 0.4, 0.6, 0.7, 0.7, 1]
 
 
 def test_evaluate_threshold():
@@ -52,9 +54,9 @@ def test_evaluate_threshold():
     assert result["fn"] == 70
 
 
-def test_grid_search(tmp_path_factory):
-    # Create a temporary directory for the test
-    tmp_dir = tmp_path_factory.mktemp("test_grid_search")
+@pytest.mark.slow
+def test_grid_search(setup_simulated_data):
+    data = setup_simulated_data
     params_gcv = {
         4: {
             "discretize__bins": [(0, 25, 50, 75, 100), (0, 20, 50, 80, 100)],
@@ -65,8 +67,8 @@ def test_grid_search(tmp_path_factory):
             "clf__nstates": [5, 5],
         },
     }
-    search_result = grid_search(params_gcv, njobs=1, outputdir=tmp_dir)
-    print(search_result)
+    search_result = grid_search(data, params_gcv, njobs=1, pews=[10, 20])
+    assert len(search_result) == 16
 
 
 def test_best_estimator(setup_data_dir):

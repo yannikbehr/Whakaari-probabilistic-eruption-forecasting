@@ -8,6 +8,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from sklearn import set_config
 from sklearn.base import BaseEstimator, OneToOneFeatureMixin, TransformerMixin
 from sklearn.datasets import get_data_home
 from sklearn.utils.validation import check_array, check_is_fitted, validate_data
@@ -15,6 +16,8 @@ from statsmodels.tools.sm_exceptions import ConvergenceWarning
 from tqdm import tqdm
 
 from whakaaribn.assimilate import LocalLinearTrend
+
+set_config(transform_output="pandas")
 
 
 def convert_probability(prob: np.ndarray, hin: int, hnew: int) -> np.ndarray:
@@ -39,27 +42,6 @@ def convert_probability(prob: np.ndarray, hin: int, hnew: int) -> np.ndarray:
     """
     p1D = 1 - (1 - prob) ** (1 / hin)
     return 1 - (1 - p1D) ** hnew
-
-
-def hash_dataframe(df: pd.DataFrame) -> str:
-    """
-    Compute a hash for a pandas dataframe.
-
-    Parameters
-    ----------
-    df : pandas.DataFrame
-         Input dataframe to hash.
-    Returns
-    -------
-    str
-        Hash of the dataframe.
-    """
-
-    # Hash the DataFrame
-    hash_series = pd.util.hash_pandas_object(df)
-    hash_string = hash_series.astype(str).values.sum()
-    hash_value = hashlib.sha256(hash_string.encode()).hexdigest()
-    return hash_value
 
 
 def gradient(df: pd.DataFrame, period: str = "14D") -> pd.DataFrame:
@@ -365,7 +347,8 @@ class Bin(object):
         for _b in bins:
             bin_min = (1 - factor) * _b
             bin_max = (1 + factor) * _b
-            _tbins.append(rs.uniform(min(bin_min, bin_max), max(bin_min, bin_max)))
+            _tbins.append(rs.uniform(
+                min(bin_min, bin_max), max(bin_min, bin_max)))
         # make sure new boundaries are in the right order
         _tbins.sort()
         if not increasing:
@@ -398,7 +381,8 @@ class Bin(object):
         if np.any(bin_idx < 0) or np.any(bin_idx > self._nbins - 1):
             if extrapolate:
                 bin_idx = np.where(bin_idx < 0, 0, bin_idx)
-                bin_idx = np.where(bin_idx > self._nbins - 1, self._nbins - 1, bin_idx)
+                bin_idx = np.where(bin_idx > self._nbins -
+                                   1, self._nbins - 1, bin_idx)
             else:
                 msg = "Value outside of range of bins: {}"
                 raise ValueError(msg.format(self._bins))
@@ -516,7 +500,7 @@ class BinData(Bin):
         for _bn in self._bin_names:
             try:
                 idx = np.where(unique == _bn)[0]
-                rvals.append(float(vals[idx]))
+                rvals.append(float(vals[idx.squeeze()]))
             except TypeError:
                 rvals.append(small_prob)
         # normalise so probabilities sum to one
@@ -574,7 +558,8 @@ class Discretizer(OneToOneFeatureMixin, BaseEstimator, TransformerMixin):
         self.bin_edges_ = np.zeros((X.shape[1], self.nbins + 1))
         for col_idx in range(X.shape[1]):
             # preserve NaN indices
-            valid_idx = np.where((~np.isnan(X[:, col_idx])) & (X[:, col_idx] > 0))
+            valid_idx = np.where(
+                (~np.isnan(X[:, col_idx])) & (X[:, col_idx] > 0))
             _, self.bin_edges_[col_idx] = bin_data(
                 X[:, col_idx],
                 self.bins,
@@ -610,10 +595,12 @@ class Discretizer(OneToOneFeatureMixin, BaseEstimator, TransformerMixin):
         if np.any(bin_idx < 0) or np.any(bin_idx > self.nbins - 1):
             if extrapolate:
                 bin_idx = np.where(bin_idx < 0, 0, bin_idx)
-                bin_idx = np.where(bin_idx > self.nbins - 1, self.nbins - 1, bin_idx)
+                bin_idx = np.where(bin_idx > self.nbins - 1,
+                                   self.nbins - 1, bin_idx)
             else:
                 bin_idx = np.where(bin_idx < 0, self.nbins, bin_idx)
-                bin_idx = np.where(bin_idx > self.nbins - 1, self.nbins, bin_idx)
+                bin_idx = np.where(bin_idx > self.nbins -
+                                   1, self.nbins, bin_idx)
         bin_names = np.array(list(self.names) + [np.nan])[bin_idx]
         retval = np.where(np.isnan(val), np.nan, bin_names)
         return retval
@@ -624,7 +611,8 @@ class Discretizer(OneToOneFeatureMixin, BaseEstimator, TransformerMixin):
         X_binned = np.full(X.shape, np.nan, float)
         for col_idx in range(X.shape[1]):
             X_binned[:, col_idx] = self.query(
-                self.bin_edges_[col_idx], X[:, col_idx], extrapolate=self.extrapolate
+                self.bin_edges_[col_idx], X[:,
+                                            col_idx], extrapolate=self.extrapolate
             )
         return X_binned
 
@@ -642,13 +630,13 @@ class ForwardImputer(TransformerMixin, BaseEstimator):
         pass
 
     def fit(self, X: np.ndarray, y: Optional[np.ndarray] = None) -> "ForwardImputer":
-        X = check_array(X, force_all_finite="allow-nan")
+        X = validate_data(self, X, reset=True, ensure_all_finite="allow-nan")
         self.n_features_ = X.shape[1]
         return self
 
     def transform(self, X: np.ndarray) -> np.ndarray:
         check_is_fitted(self, "n_features_")
-        X = check_array(X, force_all_finite="allow-nan")
+        X = validate_data(self, X, reset=False, ensure_all_finite="allow-nan")
         X_filled = np.full(X.shape, np.nan, float)
         for col_idx in range(X.shape[1]):
             arr = X[:, col_idx]
@@ -675,14 +663,15 @@ class ForecastImputer(TransformerMixin, BaseEstimator):
         self.new = new
 
     def fit(self, X: np.ndarray, y: Optional[np.ndarray] = None) -> "ForecastImputer":
-        X = check_array(X, force_all_finite="allow-nan")
+        X = validate_data(self, X, reset=True, ensure_all_finite="allow-nan")
         self.n_features_ = X.shape[1]
         # create a unique filename for the imputer
         # that is based on the input data
         output = io.BytesIO()
         np.save(output, X)
         hash = hashlib.sha256(output.getvalue()).hexdigest()
-        self.filename = os.path.join(get_data_home(), f"forecast_imputer_{hash}.npy")
+        self.filename = os.path.join(
+            get_data_home(), f"forecast_imputer_{hash}.npy")
         return self
 
     def transform(self, X: np.ndarray) -> np.ndarray:
@@ -692,7 +681,7 @@ class ForecastImputer(TransformerMixin, BaseEstimator):
                 X_filled = np.load(self.filename)
             except FileNotFoundError:
                 pass
-        X = check_array(X, force_all_finite="allow-nan")
+        X = validate_data(self, X, reset=True, ensure_all_finite="allow-nan")
         X_filled = np.ones((X.shape)) * np.nan
         dates = pd.date_range("1970-01-01", freq="D", periods=X.shape[0])
         for colidx in tqdm(range(X.shape[1])):
@@ -710,7 +699,8 @@ class ForecastImputer(TransformerMixin, BaseEstimator):
                 _date = _data_valid.index[i]
                 # find forecast horizon
                 idx = np.min(
-                    np.where((_data_valid.index - _date) > pd.Timedelta(days=0))
+                    np.where((_data_valid.index - _date)
+                             > pd.Timedelta(days=0))
                 )
                 idx_end = np.where(_data.index == _data_valid.index[idx])[0]
                 idx_start = np.where(_data.index == _date)[0]
@@ -792,7 +782,8 @@ def eqRate(
 
     """
     if fixed_time is not None and fixed_nevents is not None:
-        raise ValueError("Please define either 'fixed_time' or 'fixed_nevents'")
+        raise ValueError(
+            "Please define either 'fixed_time' or 'fixed_nevents'")
 
     dates = cat["origintime"].values
     if fixed_time is not None:
@@ -816,7 +807,8 @@ def eqRate(
             iS += 1
         return pd.DataFrame({"obs": aRate}, index=aBin)
     else:
-        raise ValueError("Please define either 'fixed_time' or 'fixed_nevents'")
+        raise ValueError(
+            "Please define either 'fixed_time' or 'fixed_nevents'")
 
 
 def reindex(
@@ -887,7 +879,7 @@ def hex_to_rgb(value: str, alpha: float = 1.0) -> Tuple[int, int, int, float]:
     """Return (red, green, blue) for the color given as #rrggbb."""
     value = value.lstrip("#")
     lv = len(value)
-    rgb_list = [int(value[i : i + lv // 3], 16) for i in range(0, lv, lv // 3)]
+    rgb_list = [int(value[i: i + lv // 3], 16) for i in range(0, lv, lv // 3)]
     rgb_list.append(alpha)
     return tuple(rgb_list)
 
