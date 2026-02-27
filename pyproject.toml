@@ -31,7 +31,9 @@ dependencies = [
     "tonik>=0.1.21,<0.2",
     "plotly>=6.5.2,<7",
     "kaleido>=1.2.0,<2",
-    "papermill>=2.6.0,<3"]
+    "papermill>=2.6.0,<3",
+    "schedule>=1.2.2,<2",
+    "owslib>=0.35.0,<0.36"]
 
 [project.optional-dependencies]
 dev = ["pytest>=9.0.2,<10",
@@ -39,8 +41,7 @@ dev = ["pytest>=9.0.2,<10",
        "ipdb>=0.13.13,<0.14"]
 
 [project.scripts]
-bayes_daemon = "whakaaribn.cli:main"
-whakaari_api = "whakaaribn.api:main"
+whakaaribn_api = "whakaaribn.api:main"
 whakaaribn = "whakaaribn.cli:main"
 
 [tool.setuptools.packages]
