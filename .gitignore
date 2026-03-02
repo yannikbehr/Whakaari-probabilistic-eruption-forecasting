@@ -6,16 +6,16 @@ __pycache__
 examples/data
 .cache
 .ipynb_checkpoints
-whakaaribn/data/*.zarr
+src/whakaaribn/data/*.zarr
 *.snakemake
-whakaaribn/data/workflows/plots
-whakaaribn/data/workflows/data
-whakaaribn/data/workflows/forecasts
-whakaaribn/data/workflows/results
-whakaaribn/data/workflows/logs
+src/whakaaribn/data/workflows/plots
+src/whakaaribn/data/workflows/data
+src/whakaaribn/data/workflows/forecasts
+src/whakaaribn/data/workflows/results
+src/whakaaribn/data/workflows/logs
 *Thumbs.db
 examples
 sandbox.ipynb
-whakaaribn/data/RSAM_NZ.WIZ.10.HHZ.csv
+src/whakaaribn/data/RSAM_NZ.WIZ.10.HHZ.csv
 .nfs*
 
