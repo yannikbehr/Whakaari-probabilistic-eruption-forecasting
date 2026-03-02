@@ -727,7 +727,7 @@ class ForecastImputer(TransformerMixin, BaseEstimator):
                     ].index
                     _data_fill.loc[invalid_dates] = prediction.loc[invalid_dates]
                     initial = False
-                forecast = _res.get_forecast(int(idx_end - idx_start))
+                forecast = _res.get_forecast(int((idx_end - idx_start)[0]))
                 _data_fill.loc[fh_start:fh_end] = forecast.predicted_mean.loc[
                     fh_start:fh_end
                 ]
