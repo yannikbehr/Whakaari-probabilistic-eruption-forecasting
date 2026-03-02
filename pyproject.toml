@@ -16,7 +16,7 @@ allow-direct-references = true
 [project]
 name = "whakaaribn"
 requires-python = ">= 3.11"
-version = "0.0.6"
+version = "0.1.0"
 authors = [
     {name = "Yannik Behr", email = "y.behr@gns.cri.nz"},
     {name = "Craig Miller", email = "c.miller@gns.cri.nz"},

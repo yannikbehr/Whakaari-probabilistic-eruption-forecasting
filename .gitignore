@@ -17,4 +17,5 @@ whakaaribn/data/workflows/logs
 examples
 sandbox.ipynb
 whakaaribn/data/RSAM_NZ.WIZ.10.HHZ.csv
+.nfs*
 
