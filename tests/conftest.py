@@ -2,7 +2,6 @@ import inspect
 import os
 from datetime import datetime, timezone
 
-import pandas as pd
 import pytest
 from aitana import whakaari
 from fastapi.testclient import TestClient

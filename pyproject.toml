@@ -10,6 +10,9 @@ exclude = [
     "/Dockerfile"
     ]
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/whakaaribn"]
+
 [tool.hatch.metadata]
 allow-direct-references = true
 
@@ -56,12 +59,12 @@ dev = ["pytest>=9.0.2,<10",
 whakaaribn_api = "whakaaribn.api:main"
 whakaaribn = "whakaaribn.cli:main"
 
-[tool.setuptools.packages]
-find = {}
-
-[tool.setuptools.package-data]
-whakaaribn = ["data/*.json",
-             "data/WhiteIs_Eruption_Catalogue.csv"]
+[tool.hatch.build]
+include = ["src/whakaaribn/data/*.json",
+           "src/whakaaribn/data/WhiteIs_Eruption_Catalogue.csv",
+           "src/whakaaribn/data/271912_Brad_Scott_GNS_Science.jpg",
+           "src/whakaaribn/data/workflows/Snakefile",
+           "src/whakaaribn/data/workflows/notebooks/*.ipynb"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
