@@ -1,166 +1,197 @@
 import math
 import os
 import tempfile
+from collections import OrderedDict
+from typing import Optional
 
 import numpy as np
 import pysmile
 import pysmile_license
+from pysmile import SMILEException
+from sklearn.base import BaseEstimator
+
+from whakaaribn import moving_average
 
 
-class BayesNet(object):
-    def __init__(self, modelfile=None, model_name=None, model_desc=None):
-        self.binning = {}
-        self.net = pysmile.Network()
-        self.write = self.net.write_file
-        if modelfile is not None:
-            if not os.path.isfile(modelfile):
-                raise FileNotFoundError("Can't find file " + modelfile)
-            self.net.read_file(modelfile)
-        else:
-            if model_name is not None:
-                self.net.set_name(model_name)
-            if model_desc is not None:
-                self.net.set_description(model_desc)
-
-    def set_binning(self, id, binning):
-        self.binning[id] = binning
-        # Now add the bin values to the node's annotation
-        self.add_annotation(id, str(binning))
-
-    def add_node(
-        self, id, states, cpt, description=None, long_description=None, position=None
+class WhakaariSmileModel(BaseEstimator):
+    def __init__(
+        self,
+        modelfile: Optional[str] = None,
+        smoothing: Optional[int] = None,
+        randomize: bool = False,
+        uniformize: bool = False,
+        nstates: int = 3,
+        debug: bool = False,
+        seed: Optional[int] = None,
+        eq_sample_size: Optional[int] = None,
+        ex_nodes: Optional[list] = None
     ):
-        handle = self.net.add_node(pysmile.NodeType.CPT, id)
-        if description is not None:
-            self.net.set_node_name(handle, description)
-        if long_description is not None:
-            self.net.set_node_description(handle, long_description)
-        if position is not None:
-            x_pos, y_pos = position
-            self.net.set_node_position(handle, x_pos, y_pos, 85, 55)
-        states_count = self.net.get_outcome_count(handle)
+        self.modelfile = modelfile
+        self.smoothing = smoothing
+        self.randomize = randomize
+        self.uniformize = uniformize
+        if self.randomize and self.uniformize:
+            raise ValueError(
+                "Can't randomize and uniformize at the same time.")
+        self.nstates = nstates
+        self.debug = debug
+        self.seed = seed
+        self.eq_sample_size = eq_sample_size
+        self.ex_nodes = ex_nodes
+
+    def create_network(self):
+        model = pysmile.Network()
+        nodes = OrderedDict(
+            {
+                "eruptions": 2,
+                "Eqr": self.nstates,
+                "CO2": self.nstates,
+                "RSAM": self.nstates,
+                "SO2": self.nstates,
+                "H2S": self.nstates,
+            }
+        )
+        for node in nodes.items():
+            node_name, nstates = node
+            node = self.add_node(model, node_name, np.arange(
+                nstates), np.ones(nstates)/nstates)
+        for i in range(len(nodes) - 1):
+            for j in range(i + 1, len(nodes)):
+                model.add_arc(list(nodes.keys())[i], list(nodes.keys())[j])
+        return model
+
+    def add_node(self, model, id, states, cpt=None):
+        handle = model.add_node(pysmile.NodeType.CPT, id)
+        states_count = model.get_outcome_count(handle)
         for i in range(0, states_count):
-            self.net.set_outcome_id(handle, i, states[i])
+            model.set_outcome_id(handle, i, str(states[i]))
         for i in range(states_count, len(states)):
-            self.net.add_outcome(handle, states[i])
-        self.net.set_node_definition(handle, cpt)
+            model.add_outcome(handle, str(states[i]))
+        if cpt is not None:
+            model.set_node_definition(handle, cpt)
         return handle
 
-    def add_annotation(self, id, text):
-        self.net.set_node_description(id, text)
+    def set_cpt(self, model, id, cpt):
+        handle = model.get_node(id)
+        model.set_node_definition(handle, cpt)
 
-    def set_cpt(self, id, cpt):
-        handle = self.net.get_node(id)
-        self.net.set_node_definition(handle, cpt)
+    def get_cpt(self, model, id):
+        handle = model.get_node(id)
+        return model.get_node_definition(handle)
 
-    def get_cpt(self, id):
-        handle = self.net.get_node(id)
-        return self.net.get_node_definition(handle)
+    def add_arc(self, model, node1, node2):
+        model.add_arc(node1, node2)
 
-    def add_arc(self, node1, node2):
-        self.net.add_arc(node1, node2)
-
-    def fit(
-        self,
-        data,
-        ex_nodes=[],
-        seed=None,
-        randomize=False,
-        uniformize=False,
-        eq_sample_size=None,
-    ):
+    def fit(self, X, y):
+        self.model = self.create_network()
+        data_bin = X.copy()
+        data_bin["eruptions"] = y
+        # The following line is needed for sklearn compatibility,
+        # but it is not used in the model itself
+        self.classes_ = np.unique(y)
         ds = pysmile.learning.DataSet()
         fd, fname = tempfile.mkstemp()
-        data.to_csv(fname, na_rep="*", index=False)
+        data_bin.to_csv(fname, na_rep="*", index=False)
         ds.read_file(fname)
-        matching = ds.match_network(self.net)
+        matching = ds.match_network(self.model)
         em = pysmile.learning.EM()
-        if seed is not None:
-            em.set_seed(seed)
-        em.set_randomize_parameters(randomize)
-        em.set_uniformize_parameters(uniformize)
-        if eq_sample_size is not None:
-            em.set_eq_sample_size(eq_sample_size)
-        em.learn(ds, self.net, matching, ex_nodes)
-        self.net.update_beliefs()
+        if self.seed is not None:
+            em.set_seed(self.seed)
+        em.set_randomize_parameters(self.randomize)
+        em.set_uniformize_parameters(self.uniformize)
+        if self.eq_sample_size is not None:
+            em.set_eq_sample_size(self.eq_sample_size)
+        if self.ex_nodes is None:
+            self.ex_nodes = []
+        em.learn(ds, self.model, matching, self.ex_nodes)
+        self.model.update_beliefs()
         os.remove(fname)
+        if self.modelfile is not None:
+            self.model.write_file(self.modelfile)
 
     def reset(self):
-        self.net.clear_all_evidence()
-        self.net.update_beliefs()
+        self.model.clear_all_evidence()
+        self.model.update_beliefs()
 
     def __str__(self):
-        self.net.update_beliefs()
+        self.model.update_beliefs()
         msgs = []
-        for nhandle in self.net.get_all_nodes():
-            nid = self.net.get_node_id(nhandle)
-            if self.net.is_evidence(nhandle):
+        for nhandle in self.model.get_all_nodes():
+            nid = self.model.get_node_id(nhandle)
+            if self.model.is_evidence(nhandle):
                 msg = "{} has evidence set to: {}"
-                msg = msg.format(nid, self.net.get_evidence(nhandle))
+                msg = msg.format(nid, self.model.get_evidence(nhandle))
                 msgs.append(msg)
             else:
-                posteriors = self.net.get_node_value(nhandle)
+                posteriors = self.model.get_node_value(nhandle)
                 for i in range(0, len(posteriors)):
                     msg = "P({}={}) = {}"
                     msg = msg.format(
-                        nid, self.net.get_outcome_id(nhandle, i), posteriors[i]
+                        nid, self.model.get_outcome_id(
+                            nhandle, i), posteriors[i]
                     )
                     msgs.append(msg)
         return "\n".join(msgs)
 
-    def set_evidence(self, node, val):
-        evidence = self.binning[node].query(val)
+    def set_evidence(self, model, node, evidence):
         if evidence is not None:
-            self.net.set_evidence(node, str(evidence))
+            model.set_evidence(node, f"State{int(float(evidence))}")
         else:
-            self.net.set_evidence(node)
-        self.net.update_beliefs()
+            model.set_evidence(node)
+        model.update_beliefs()
 
+    def predict_proba(self, X):
+        if not hasattr(self, "model"):
+            if self.modelfile is not None and os.path.isfile(self.modelfile):
+                self.model = pysmile.Network()
+                self.model.read_file(self.modelfile)
+            else:
+                raise ValueError("Model not fitted or modelfile not found.")
 
-def circular_node_positions(num_nodes, radius=200, offset=(200, 200)):
-    positions = []
-    for i in range(num_nodes):
-        theta = (2 * math.pi * i) / num_nodes
-        x = radius * math.cos(theta)
-        y = radius * math.sin(theta)
-        positions.append((int(x+offset[0]), int(y+offset[1])))
-    return positions
+        proba = np.ones((X.shape[0], 2))
+        for r in range(X.shape[0]):
+            for node_name in X.columns:
+                val = X[node_name].iloc[r]
+                if not val == "*":
+                    try:
+                        self.set_evidence(self.model, node_name, val)
+                    except SMILEException as e:
+                        print(r)
+                        X.to_csv("SMILE_exception_training_data.csv")
+                        self.model.write_file("SMILE_exception_model.xdsl")
+                        raise (e)
+            try:
+                self.model.update_beliefs()
+            except SMILEException as e:
+                X.to_csv("SMILE_exception_training_data.csv")
+                self.model.write("SMILE_exception_model.xdsl")
+                raise (e)
+            proba[r, 0] = self.model.get_node_value("eruptions")[0]
+            proba[r, 1] = self.model.get_node_value("eruptions")[1]
+            self.model.clear_all_evidence()
+            self.model.update_beliefs()
 
-def stacked_node_positions(num_causal_nodes, num_child_nodes, x_child=150,
-                           y_causal=200, y_child=100, node_distance=100):
-    """
-    Create node positions for a stacked layout where causal nodes are at the top and child nodes at the bottom.
-    """
-    x_causal = int((x_child + (num_child_nodes-1)*node_distance) / 2. - (num_causal_nodes-1)*node_distance / 2.)
-    positions = []
-    for i in range(num_causal_nodes):
-        positions.append((x_causal + i*node_distance, y_causal))
-    for i in range(num_child_nodes):
-        positions.append((x_child + i*node_distance, y_child))
-    return positions
+        if self.smoothing is not None:
+            proba = moving_average(
+                proba, window_size=self.smoothing, axis=0, nan=False)
+        return proba
 
-def fully_connected(nodes):
-    edges = []
-    for i in range(len(nodes)):
-        for j in range(i+1, len(nodes)):
-            edges.append((nodes[i], nodes[j]))
-    return edges
+    def from_pgmpy_model(self, pgmpy_model):
+        model = pysmile.Network()
+        for node_name, states in pgmpy_model.states.items():
+            self.add_node(model, node_name, states)
+        for edge in pgmpy_model.edges:
+            nhandle_parent = model.get_node(edge[0])
+            nhandle_child = model.get_node(edge[1])
+            self.add_arc(model, nhandle_parent, nhandle_child)
 
-def causal(causal_nodes, child_nodes):
-    edges = []
-    for i in range(len(child_nodes)):
-        for j in range(len(causal_nodes)):
-            edges.append((causal_nodes[j], child_nodes[i]))
-    return edges
+        cpds = pgmpy_model.get_cpds()
+        for cpd in cpds:
+            self.set_cpt(model, cpd.variables[0], cpd.get_values().T.flatten())
+        self.model = model
+        if self.modelfile is not None:
+            self.model.write_file(self.modelfile)
 
-def create_network(network_file, node_names, positions, edges):
-    net_ = BayesNet()
-    for node, pos in zip(node_names, positions):
-        node_name, states = node
-        nstates = len(states) 
-        node = net_.add_node(node_name, states, np.ones(nstates)/nstates, 
-                             description=node_name, position=pos)
-    for parent, child in edges:
-        net_.add_arc(parent, child)
-    net_.write(network_file)
-
+    def predict(self, X):
+        proba = self.predict_proba(X)
+        return self.classes_[np.argmax(proba, axis=1)]
