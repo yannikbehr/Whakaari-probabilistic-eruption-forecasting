@@ -8,11 +8,11 @@ examples/data
 .ipynb_checkpoints
 src/whakaaribn/data/*.zarr
 *.snakemake
-src/whakaaribn/data/workflows/plots
-src/whakaaribn/data/workflows/data
-src/whakaaribn/data/workflows/forecasts
-src/whakaaribn/data/workflows/results
-src/whakaaribn/data/workflows/logs
+src/whakaaribn/data/workflow/plots
+src/whakaaribn/data/workflow/data
+src/whakaaribn/data/workflow/forecasts
+src/whakaaribn/data/workflow/results
+src/whakaaribn/data/workflow/logs
 *Thumbs.db
 examples
 sandbox.ipynb
