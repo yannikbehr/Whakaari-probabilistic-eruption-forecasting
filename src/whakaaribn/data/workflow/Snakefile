@@ -1,11 +1,11 @@
 import pandas as pd
 from datetime import datetime, timezone
-from aitana import whakaari
 from whakaaribn.grid_search import grid_search, get_best_estimator
-from whakaaribn.util import assign_group_labels
 
 STARTDATE=datetime(2009, 1, 1, tzinfo=timezone.utc)
 ENDDATE=datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+include: "rules/data.smk"
 
 rule all:
     input:
@@ -17,34 +17,6 @@ rule all:
         "plots/whakaari_data_plot.png",
         "plots/whakaari_island_and_graphs.png",
         "plots/eruption_forecasts_whakaari_hindcast.png"
-
-rule download:
-    output:
-        "data/whakaari_data.csv"
-    run:
-        start_date=STARTDATE
-        end_date=ENDDATE
-        data = whakaari.load_all(
-            fill_method=None,
-            start_date=start_date,
-            end_date=end_date,
-            ignore_data=("LP", "VLP"),
-            fuse_so2=False
-        )
-        data.to_csv("data/whakaari_data.csv")
-
-rule assign_groups:
-    input:
-        "data/whakaari_data.csv"
-    output:
-        "data/whakaari_data_with_groups.csv"
-    run:
-        eruptions = whakaari.eruptions(2, "0D", end_date=ENDDATE)
-        data = pd.read_csv(input[0], parse_dates=True, index_col=0)
-        data_with_groups = assign_group_labels(data, eruptions,
-        startdate=STARTDATE, enddate=ENDDATE,
-        ndays=30, min_interval=360)
-        data_with_groups.to_csv(output[0])
 
 rule data_plot:
     input:
