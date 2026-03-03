@@ -101,6 +101,8 @@ class WhakaariModel(BaseEstimator):
             self.model = self.create_network()
         data_bin = X.copy()
         data_bin["eruptions"] = y
+        # The following line is needed for sklearn compatibility,
+        # but it is not used in the model itself
         self.classes_ = np.unique(y)
         if method == "em":
             pnet_new = DiscreteBayesianNetwork(self.model.edges())
