@@ -134,10 +134,8 @@ class WhakaariSmileModel(BaseEstimator):
         return "\n".join(msgs)
 
     def set_evidence(self, model, node, evidence):
-        if evidence is not None:
+        if evidence is not None and not np.isnan(evidence):
             model.set_evidence(node, f"State{int(float(evidence))}")
-        else:
-            model.set_evidence(node)
         model.update_beliefs()
 
     def predict_proba(self, X):
