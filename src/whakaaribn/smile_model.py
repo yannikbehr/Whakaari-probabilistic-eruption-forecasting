@@ -5,12 +5,33 @@ from collections import OrderedDict
 from typing import Optional
 
 import numpy as np
-import pysmile
-import pysmile_license
-from pysmile import SMILEException
 from sklearn.base import BaseEstimator
 
+try:
+    import pysmile
+    import pysmile_license
+    from pysmile import SMILEException
+    PYSMILE_AVAILABLE = True
+except ImportError:
+    PYSMILE_AVAILABLE = False
+
 from whakaaribn import moving_average
+
+
+def _require_pysmile(method):
+    """Decorator that raises ImportError if pysmile is not available."""
+    def wrapper(*args, **kwargs):
+        if not PYSMILE_AVAILABLE:
+            raise ImportError(
+                "pysmile and pysmile_license are required to use WhakaariSmileModel. "
+                "Install them with:\n"
+                "  pip install --index-url https://support.bayesfusion.com/pysmile-B/ pysmile\n"
+                "Then copy your BayesFusion license file to the site-packages directory."
+            )
+        return method(*args, **kwargs)
+    wrapper.__doc__ = method.__doc__
+    wrapper.__name__ = method.__name__
+    return wrapper
 
 
 class WhakaariSmileModel(BaseEstimator):
@@ -39,6 +60,7 @@ class WhakaariSmileModel(BaseEstimator):
         self.eq_sample_size = eq_sample_size
         self.ex_nodes = ex_nodes
 
+    @_require_pysmile
     def create_network(self):
         model = pysmile.Network()
         nodes = OrderedDict(
@@ -82,6 +104,7 @@ class WhakaariSmileModel(BaseEstimator):
     def add_arc(self, model, node1, node2):
         model.add_arc(node1, node2)
 
+    @_require_pysmile
     def fit(self, X, y):
         self.model = self.create_network()
         data_bin = X.copy()
@@ -138,6 +161,7 @@ class WhakaariSmileModel(BaseEstimator):
             model.set_evidence(node, f"State{int(float(evidence))}")
         model.update_beliefs()
 
+    @_require_pysmile
     def predict_proba(self, X):
         if not hasattr(self, "model"):
             if self.modelfile is not None and os.path.isfile(self.modelfile):
@@ -174,6 +198,7 @@ class WhakaariSmileModel(BaseEstimator):
                 proba, window_size=self.smoothing, axis=0, nan=False)
         return proba
 
+    @_require_pysmile
     def from_pgmpy_model(self, pgmpy_model):
         model = pysmile.Network()
         for node_name, states in pgmpy_model.states.items():

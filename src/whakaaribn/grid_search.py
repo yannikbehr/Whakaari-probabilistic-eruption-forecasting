@@ -13,10 +13,11 @@ from sklearn.pipeline import Pipeline
 from whakaaribn import (
     Discretizer,
     SequentialGroupSplit,
-    WhakaariModel,
     pre_eruption_window,
     split_by_group,
 )
+from whakaaribn.model import WhakaariModel
+from whakaaribn.smile_model import PYSMILE_AVAILABLE, WhakaariSmileModel
 
 set_config(transform_output="pandas")
 
@@ -378,7 +379,13 @@ def my_roc_auc(estimator, X, y, eruptions, pew=90):
     return score
 
 
-def grid_search(data, params_gcv, fout=None, recompute=False, njobs=10, pews=np.arange(10, 110, 10)):
+def grid_search(data, params_gcv, fout=None, recompute=False, njobs=10, pews=np.arange(10, 110, 10),
+                model_class: type[WhakaariModel | WhakaariSmileModel] = WhakaariModel):
+    if model_class is WhakaariSmileModel and not PYSMILE_AVAILABLE:
+        raise ImportError(
+            "WhakaariSmileModel requires pysmile. "
+            "Install it with: pip install --index-url https://support.bayesfusion.com/pysmile-B/ pysmile"
+        )
     if fout is not None and recompute is False:
         if os.path.exists(fout):
             print("Loading search results from ", fout)
@@ -387,7 +394,7 @@ def grid_search(data, params_gcv, fout=None, recompute=False, njobs=10, pews=np.
             return search_results
 
     pipe = Pipeline([('discretize', Discretizer()),
-                     ('clf', WhakaariModel(smoothing=30, uniformize=True))])
+                     ('clf', model_class(smoothing=30, uniformize=True))])
 
     pipe.set_output(transform="pandas")
     cv = SequentialGroupSplit(data.group[data.group != 'e'])

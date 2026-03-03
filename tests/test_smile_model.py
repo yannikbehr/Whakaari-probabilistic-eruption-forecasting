@@ -1,9 +1,13 @@
-import numpy as np
-from sklearn import set_config
-from sklearn.pipeline import Pipeline
-
-from whakaaribn import Discretizer, WhakaariModel, split_by_group
 from whakaaribn.smile_model import WhakaariSmileModel
+from whakaaribn.model import WhakaariModel
+from whakaaribn import Discretizer, split_by_group
+from sklearn.pipeline import Pipeline
+from sklearn import set_config
+import numpy as np
+import pytest
+
+pytest.importorskip("pysmile", reason="pysmile is not installed")
+
 
 set_config(transform_output="pandas")
 

@@ -12,9 +12,10 @@ from tqdm import tqdm
 from whakaaribn import (
     Discretizer,
     SequentialGroupSplit,
-    WhakaariModel,
     pre_eruption_window,
 )
+from whakaaribn.model import WhakaariModel
+from whakaaribn.smile_model import PYSMILE_AVAILABLE, WhakaariSmileModel
 
 set_config(transform_output="pandas")
 
@@ -44,11 +45,18 @@ def forecast(
     smoothing: Optional[int] = None,
     factor: float = 0.0,
     hindcast: bool = False,
+    model_class: type[WhakaariModel | WhakaariSmileModel] = WhakaariModel,
 ):
     """
     Compute BN forecasts
     """
-    wm = WhakaariModel(smoothing=smoothing, uniformize=True, nstates=len(bins) - 1)
+    if model_class is WhakaariSmileModel and not PYSMILE_AVAILABLE:
+        raise ImportError(
+            "WhakaariSmileModel requires pysmile. "
+            "Install it with: pip install --index-url https://support.bayesfusion.com/pysmile-B/ pysmile"
+        )
+    wm = model_class(smoothing=smoothing, uniformize=True,
+                     nstates=len(bins) - 1)
     data_fill = data.ffill(axis=0)
     data_fill.loc["2022-07-01":, "RSAM"] = np.nan
     data_fill.loc["2022-07-01":, "Eqr"] = np.nan
@@ -135,7 +143,8 @@ def sensitivity_analysis(
     xds_all = xr.DataArray(
         np.array(fts),
         dims=["model", "datetime"],
-        coords={"model": np.arange(len(fts)), "datetime": xds["probs"].datetime},
+        coords={"model": np.arange(
+            len(fts)), "datetime": xds["probs"].datetime},
     )
     return xds_all
 

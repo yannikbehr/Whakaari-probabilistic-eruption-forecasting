@@ -2,7 +2,8 @@ import numpy as np
 from sklearn import set_config
 from sklearn.pipeline import Pipeline
 
-from whakaaribn import Discretizer, WhakaariModel, split_by_group
+from whakaaribn import Discretizer, split_by_group
+from whakaaribn.model import WhakaariModel
 
 set_config(transform_output="pandas")
 

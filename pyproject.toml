@@ -19,7 +19,7 @@ allow-direct-references = true
 [project]
 name = "whakaaribn"
 requires-python = ">= 3.11"
-version = "0.1.0"
+version = "0.1.1"
 authors = [
     {name = "Yannik Behr", email = "y.behr@gns.cri.nz"},
     {name = "Craig Miller", email = "c.miller@gns.cri.nz"},
@@ -72,3 +72,14 @@ log_cli = true
 
 [tool.ruff.lint]
 unfixable = ["F401"]
+
+[tool.hatch.envs.test]
+dependencies = [
+  "pytest",
+  "httpx"
+]
+[[tool.hatch.envs.test.matrix]]
+python = ["3.11", "3.12", "3.13"]
+
+[tool.hatch.envs.test.scripts]
+run-pytest = "pytest tests"

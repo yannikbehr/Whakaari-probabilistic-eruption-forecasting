@@ -1,3 +1,7 @@
+import importlib
+from os import PathLike
+from typing import Optional
+
 from .util import (
     Bin,
     BinData,
@@ -17,10 +21,6 @@ from .util import (
     reindex,
     split_by_group,
 )
-from whakaaribn.model import WhakaariModel
-import importlib
-from os import PathLike
-from typing import Optional
 
 
 def get_data(filename: Optional[PathLike] = None) -> str:
