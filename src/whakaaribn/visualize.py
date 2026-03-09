@@ -219,7 +219,8 @@ data_trans = {
 def composite_plot(
     prob, data, cols=["RSAM", "CO2", "TemperatureBin"], elicitation=None, fout=None
 ):
-    colors = ["rgba(123,204,196,1)", "rgba(50,136,189,1)", "rgba(253,174,97,1)"]
+    colors = ["rgba(123,204,196,1)", "rgba(50,136,189,1)",
+              "rgba(253,174,97,1)"]
     if prob is None:
         prob = pd.DataFrame(
             {
@@ -263,7 +264,8 @@ def composite_plot(
                 name=data_trans[col]["name"],
             )
         )
-        title = "{:s} {:s}".format(data_trans[col]["name"], data_trans[col]["unit"])
+        title = "{:s} {:s}".format(
+            data_trans[col]["name"], data_trans[col]["unit"])
         yaxes[i]["title"] = title
 
     forecast_timeseries(
@@ -354,7 +356,8 @@ def trellis_plot(
         for name, model in models.items():
             if name in ["min", "max", "ensemble"]:
                 continue
-            time = pd.to_datetime(model["model"]["datetime"])[data.group == group_name]
+            time = pd.to_datetime(model["model"]["datetime"])[
+                data.group == group_name]
             probs = model["model"].values[data.group == group_name]
             fig.add_trace(
                 go.Scatter(
@@ -362,7 +365,8 @@ def trellis_plot(
                     y=probs,
                     mode="lines",
                     name=name,
-                    line_color=model["color"],
+                    line=dict(color=model["color"],
+                              dash=model.get("dash", "solid")),
                     showlegend=showlegend,
                 ),
                 row=irow + 1,
@@ -846,9 +850,10 @@ def forecast_plot(
             col=col,
         )
     if eruptions:
-        eruptions = whakaari.eruptions(1, "0D", end_date=datetime.now(timezone.utc))
+        eruptions = whakaari.eruptions(
+            1, "0D", end_date=datetime.now(timezone.utc))
         dfe = eruptions.loc[
-            pd.to_datetime(frcst.datetime[0].values, utc=True) : pd.to_datetime(
+            pd.to_datetime(frcst.datetime[0].values, utc=True): pd.to_datetime(
                 frcst.datetime[-1].values, utc=True
             )
         ]
