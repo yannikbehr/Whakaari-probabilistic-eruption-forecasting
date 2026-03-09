@@ -1,5 +1,7 @@
+ARG D_UID="1001"
+ARG D_GID="1001"
 
-FROM "mcr.microsoft.com/devcontainers/python:3.11-trixie" 
+FROM "mcr.microsoft.com/devcontainers/python:3.13-trixie" AS base
 
 USER root
 RUN apt-get update && \
@@ -20,8 +22,40 @@ RUN apt-get update && \
     graphviz && \
     rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --index-url https://support.bayesfusion.com/pysmile-B/ pysmile && \
+RUN /usr/local/bin/pip3 install --index-url https://support.bayesfusion.com/pysmile-B/ pysmile && \
     wget https://artifactory.gns.cri.nz:443/artifactory/container-files/pysmile_license.py && \
-    cp pysmile_license.py /usr/local/lib/python3.11/site-packages
+    cp pysmile_license.py /usr/local/lib/python3.13/site-packages
 
-USER vscode 
+FROM base AS dev
+
+USER vscode
+
+FROM base AS app
+
+ARG D_UID
+ARG D_GID
+
+COPY /docker/fix-permissions /usr/local/bin/fix-permissions
+
+# Configure environment
+ENV SHELL=/bin/bash \
+    D_UID=$D_UID \
+    D_GID=$D_GID \
+    LC_ALL=en_US.UTF-8 \
+    LANG=en_US.UTF-8 \
+    LANGUAGE=en_US.UTF-8 \
+    HOME=/home/bayes
+
+RUN groupadd -g $D_GID bayes && \
+    useradd -m -s /bin/bash -N -u $D_UID -G bayes bayes && \
+    chmod a+rx /usr/local/bin/fix-permissions && \
+    mkdir $HOME/data && \
+    fix-permissions $HOME && \
+    fix-permissions $HOME/data && \
+    fix-permissions /usr/local
+
+USER bayes
+WORKDIR $HOME
+COPY . $HOME 
+RUN --mount=type=cache,target=${HOME}/.cache/pip /usr/local/bin/pip3 install .
+RUN echo 'y' | plotly_get_chrome

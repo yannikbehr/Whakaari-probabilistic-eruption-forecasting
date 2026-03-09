@@ -3,8 +3,9 @@
 {
 	"name": "whakaari-bn-dev",
 	"build": {
-		"dockerfile": "../Dockerfile",
-		"context": ".."
+		"dockerfile": "../docker/Dockerfile",
+		"context": "..",
+		"target": "dev"
 	},
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
@@ -13,7 +14,7 @@
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	//"forwardPorts": [8050],
 	// Use 'postCreateCommand' to run commands after the container is created.
-	"postCreateCommand": "/usr/local/bin/pip3 install -e '.[dev]'",
+	"postCreateCommand": "/usr/local/bin/pip3 install -e '.[dev]'&& echo 'y' | plotly_get_chrome",
 
 	"customizations": {
 		"vscode": {
