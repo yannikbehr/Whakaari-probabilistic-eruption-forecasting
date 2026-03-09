@@ -117,6 +117,7 @@ def sensitivity_analysis(
     bins: tuple = (0, 5, 95, 100),
     factor: float = 0.1,
     nmodels: int = 100,
+    model_class: type[WhakaariModel | WhakaariSmileModel] = WhakaariModel,
 ):
     """
     Compute sensitivity analysis by varying bin boundaries.
@@ -129,6 +130,8 @@ def sensitivity_analysis(
             and (1 + factor) * old_boundary.
         nmodels: int
             Number of times to repeat sampling.
+        model_class: type[WhakaariModel | WhakaariSmileModel]
+            Model class used for forecasting.
     """
     fts = []
     for i in tqdm(range(nmodels)):
@@ -138,6 +141,7 @@ def sensitivity_analysis(
             bins=bins,
             smoothing=30,
             factor=factor,
+            model_class=model_class,
         )
         fts.append(xds["probs"].values)
     xds_all = xr.DataArray(
@@ -149,9 +153,18 @@ def sensitivity_analysis(
     return xds_all
 
 
-def uncertainty_analysis(data: pd.DataFrame, search_results: pd.DataFrame):
+def uncertainty_analysis(
+    data: pd.DataFrame,
+    search_results: pd.DataFrame,
+    model_class: type[WhakaariModel | WhakaariSmileModel] = WhakaariModel,
+):
     """
     Compute the spread of forecasts that were tested during the grid search.
+
+    Parameters
+    ----------
+        model_class: type[WhakaariModel | WhakaariSmileModel]
+            Model class used for forecasting.
     """
 
     pews = search_results.index.get_level_values(0).unique()
@@ -167,6 +180,7 @@ def uncertainty_analysis(data: pd.DataFrame, search_results: pd.DataFrame):
                     pew=pew,
                     bins=_e["discretize__bins"],
                     smoothing=30,
+                    model_class=model_class,
                 )
                 fts.append(xds["probs"].values)
                 scores.append(_c[1].mean_test_mod_roc_auc_no_pew)
