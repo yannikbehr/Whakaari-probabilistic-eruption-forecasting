@@ -18,24 +18,6 @@ rule all:
         "plots/whakaari_island_and_graphs.png",
         "plots/eruption_forecasts_whakaari_hindcast.png"
 
-rule data_plot:
-    input:
-        "data/whakaari_data_with_groups.csv"
-    output:
-        "plots/whakaari_data_plot.png"
-    log:
-        notebook="logs/notebooks/data_plot.ipynb"
-    notebook:
-        "notebooks/data_plot.py.ipynb"
-
-rule overview_plot:
-    output:
-        "plots/whakaari_island_and_graphs.png"
-    log:
-        notebook="logs/notebooks/overview_plot.ipynb"
-    notebook:
-        "notebooks/overview_plot.py.ipynb"
-
 rule grid_search:
     input:
         "data/whakaari_data_with_groups.csv"
@@ -117,7 +99,7 @@ rule uncertainty:
         xds_uncertainty = uncertainty_analysis(data, grid_search_results)
         xds_uncertainty.to_netcdf(output[0])
 
-rule trellis_plots:
+rule forecast_plots:
     input:
         forecast_all_data="forecasts/whakaari_forecasts_all_data.nc",
         forecast_seismic="forecasts/whakaari_forecasts_seismic.nc",
@@ -125,19 +107,58 @@ rule trellis_plots:
         forecast_all_data_hindcast="forecasts/whakaari_forecasts_all_data_hindcast.nc",
         forecast_seismic_hindcast="forecasts/whakaari_forecasts_seismic_hindcast.nc",
         forecast_gas_hindcast="forecasts/whakaari_forecasts_gas_hindcast.nc",
-        forecast_uncertainty="forecasts/whakaari_uncertainty.nc",
-        forecast_sensitivity="forecasts/whakaari_sensitivity.nc",
         data="data/whakaari_data_with_groups.csv",
-        grid_search_results="results/grid_search_results.csv"
     output:
         eruption_forecasts="plots/eruption_forecasts_whakaari.png",
-        model_objective_function="plots/model_objective_function.png",
-        forecast_sensitivity_plot="plots/forecast_sensitivity.png",
-        forecast_uncertainty_plot="plots/forecast_uncertainty.png",
-        forecast_ensemble_plot="plots/forecast_ensemble.png",
         eruption_forecasts_hindcast="plots/eruption_forecasts_whakaari_hindcast.png"
     log:
         # optional path to the processed notebook
         notebook="logs/notebooks/forecast_plots.ipynb"
     notebook:
         "notebooks/forecast_plots.py.ipynb"
+
+rule objective_function_plot:
+    input:
+        grid_search_results="results/grid_search_results.csv"
+    output:
+        model_objective_function="plots/model_objective_function.png",
+    log:
+        notebook="logs/notebooks/objective_function_plot.ipynb"
+    notebook:
+        "notebooks/objective_function_plot.py.ipynb"
+
+rule sensitivity_plot:
+    input:
+        forecast_all_data="forecasts/whakaari_forecasts_all_data.nc",
+        forecast_sensitivity="forecasts/whakaari_sensitivity.nc",
+        data="data/whakaari_data_with_groups.csv"
+    output:
+        forecast_sensitivity_plot="plots/forecast_sensitivity.png",
+    log:
+        notebook="logs/notebooks/sensitivity_plot.ipynb"
+    notebook:
+        "notebooks/sensitivity_plot.py.ipynb"   
+
+rule uncertainty_plot:
+    input:
+        forecast_all_data="forecasts/whakaari_forecasts_all_data.nc",
+        forecast_uncertainty="forecasts/whakaari_uncertainty.nc",
+        data="data/whakaari_data_with_groups.csv"
+    output:
+        forecast_uncertainty_plot="plots/forecast_uncertainty.png",
+    log:
+        notebook="logs/notebooks/uncertainty_plot.ipynb"
+    notebook:
+        "notebooks/uncertainty_plot.py.ipynb"   
+
+rule ensemble_plot:
+    input:
+        forecast_all_data="forecasts/whakaari_forecasts_all_data.nc",
+        forecast_uncertainty="forecasts/whakaari_uncertainty.nc",
+        data="data/whakaari_data_with_groups.csv"
+    output:
+        forecast_ensemble_plot="plots/forecast_ensemble.png",
+    log:
+        notebook="logs/notebooks/ensemble_plot.ipynb"
+    notebook:
+        "notebooks/ensemble_plot.py.ipynb"
