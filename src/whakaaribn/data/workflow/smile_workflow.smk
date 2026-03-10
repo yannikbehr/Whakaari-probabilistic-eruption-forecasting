@@ -101,9 +101,7 @@ rule uncertainty_smile:
         "forecasts/whakaari_uncertainty_smile.nc"
     run:
         from whakaaribn.forecast import uncertainty_analysis
-        from sklearn import set_config
         from whakaaribn.smile_model import WhakaariSmileModel
-        set_config(transform_output="pandas")
         data = pd.read_csv(input[1], parse_dates=True, index_col=0)
         grid_search_results = pd.read_csv(input[0], index_col=(0, 1, 2), converters={"params": eval})
         model_class = WhakaariSmileModel
