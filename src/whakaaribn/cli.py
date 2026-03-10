@@ -47,7 +47,7 @@ def _prepare_workflow_directory(snakefile: str, directory: str) -> str:
 
 def _run_snakemake(snakefile: str = None, directory: str = None, cores: int = 1,
                    check=False, extra_args: Sequence[str] | None = None,
-                   backend: str = "smile", clean: bool = False):
+                   backend: str = "pgmpy", clean: bool = False):
     """Invoke snakemake with the bundled workflow in the given directory."""
     if snakefile is None:
         snakefile = BACKEND_SNAKEFILES.get(backend)
@@ -81,22 +81,24 @@ def _run_snakemake(snakefile: str = None, directory: str = None, cores: int = 1,
     sys.exit(0)
 
 
-def run_benchmark(directory, backend="smile", cores=1, clean=False):
+def run_benchmark(directory, backend="pgmpy", cores=1, clean=False):
     """Run the snakemake benchmark workflow in the given directory."""
     _run_snakemake(directory=directory, check=True,
                    backend=backend, cores=cores, clean=clean)
 
 
-def _run_workflow(directory, backend="smile", cores=1, clean=False):
+def _run_workflow(directory, backend="pgmpy", cores=1, clean=False):
     """Run the snakemake workflow in the given directory."""
     try:
-        _run_snakemake(directory=directory, check=True,
-                       backend=backend, cores=cores, clean=clean)
+        snakefile = get_data("data/workflow/monitoring_pipeline.smk")
+        _run_snakemake(snakefile=snakefile, directory=directory, check=True,
+                       backend=backend, cores=cores, clean=clean,
+                       extra_args=["--forcerun", "live_data"])
     except subprocess.CalledProcessError as e:
         logger.error("Workflow run failed: %s", e)
 
 
-def daemon(directory, backend="smile", cores=1, clean=False):
+def daemon(directory, backend="pgmpy", cores=1, clean=False):
     """Start a scheduled job running the workflow in regular intervals."""
     _run_workflow(directory, backend=backend, cores=cores, clean=clean)
     schedule.every().day.at("13:00").do(
