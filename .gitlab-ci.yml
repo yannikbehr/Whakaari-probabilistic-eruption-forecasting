@@ -58,10 +58,10 @@ deploy-processing:
     cat > /tmp/docker_config.json <<EOF
     {
       "Image": "${IMAGE}",
-      "Cmd": ["whakaaribn", "daemon", "--directory", "/opt/data", "--cores", "4"],
+      "Cmd": ["whakaaribn", "daemon", "--directory", "/home/bayes/data", "--cores", "4"],
       "HostConfig": {
         "RestartPolicy": { "Name": "always" },
-        "Binds": ["whakaari_bn_data:/opt/data"]
+        "Binds": ["whakaari_bn_data:/home/bayes/data"]
       }
     }
     EOF
@@ -86,12 +86,12 @@ deploy-api:
     cat > /tmp/docker_config.json <<EOF
     {
       "Image": "${IMAGE}",
-      "Cmd": ["whakaaribn_api", "--rootdir", "/opt/data"],
+      "Cmd": ["whakaaribn_api", "--rootdir", "/home/bayes/data"],
       "HostConfig": {
         "PortBindings": { "8003/tcp": [{ "HostPort": "${API_PORT}" }] },
         "ExposedPorts": { "8003/tcp": {} },
         "RestartPolicy": { "Name": "always" },
-        "Binds": ["whakaari_bn_data:/opt/data"]
+        "Binds": ["whakaari_bn_data:/home/bayes/data"]
       }
     }
     EOF
