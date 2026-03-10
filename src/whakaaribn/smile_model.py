@@ -114,6 +114,7 @@ class WhakaariSmileModel(BaseEstimator):
         self.classes_ = np.unique(y)
         ds = pysmile.learning.DataSet()
         fd, fname = tempfile.mkstemp()
+        os.close(fd)
         data_bin.to_csv(fname, na_rep="*", index=False)
         ds.read_file(fname)
         matching = ds.match_network(self.model)
