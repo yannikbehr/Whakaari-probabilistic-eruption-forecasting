@@ -1,5 +1,3 @@
-start_date=STARTDATE
-end_date=ENDDATE
  
 rule download:
     output:
@@ -19,8 +17,8 @@ rule assign_groups:
     run:
         from aitana import whakaari
         from whakaaribn.util import assign_group_labels
-        eruptions = whakaari.eruptions(2, "0D", end_date=ENDDATE)
         data = pd.read_csv(input[0], parse_dates=True, index_col=0)
+        eruptions = whakaari.eruptions(2, "0D", end_date=data.index[-1])
         data_with_groups = assign_group_labels(data, eruptions,
         startdate=data.index[0], enddate=data.index[-1],
         ndays=30, min_interval=360)
