@@ -23,17 +23,19 @@ INTERACTIVE=false
 CLEANALL=false
 BUILDSTAGE=app
 LOCAL=false
+BACKEND=pgmpy
 
 
 # clean up playback files
 function run_benchmark(){
     DIRECTORY=$1
     CLEANALL=$2
+    BACKEND=$3
     WORKFLOWDIR=/home/bayes/src/whakaaribn/data/workflow
     if [ "${CLEANALL}" == "true" ]; then
-        CMD="whakaaribn benchmark --directory /home/bayes/data --clean"
+        CMD="whakaaribn benchmark --directory /home/bayes/data --backend ${BACKEND} --clean"
     else
-        CMD="whakaaribn benchmark --directory /home/bayes/data --cores 5 "
+        CMD="whakaaribn benchmark --directory /home/bayes/data --backend ${BACKEND} --cores 5 "
     fi
 
     echo $CMD
@@ -55,6 +57,8 @@ Optional Arguments:
     -b, --build             Rebuild the image.
     -i, --interactive       Start the container with a bash prompt.
     --image                 Provide alternative image name.
+    --backend               BN backend to use: smile or pgmpy.
+                            (Default: pgmpy)
     --cleanall              Clean raw data and input files before
                             running a new playback.
     --data                  Provide an alternative data root directory.
@@ -69,6 +73,7 @@ do
         -b | --build) BUILD=true;;
         -i | --interactive) INTERACTIVE=true;;
         --print) PRINTEVENTS=true;;
+        --backend) BACKEND="$2";shift;;
         --cleanall) CLEANALL=true;;
         --image) IMAGE="$2";shift;;
         --data) DATADIR="$2";shift;;
@@ -96,4 +101,5 @@ if [ "${INTERACTIVE}" == "true" ]; then
     exit 0
 fi
 
-run_benchmark $DATADIR $CLEANALL
+mkdir -p "$DATADIR"
+run_benchmark $DATADIR $CLEANALL $BACKEND
