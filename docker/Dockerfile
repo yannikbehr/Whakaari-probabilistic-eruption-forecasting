@@ -59,5 +59,5 @@ RUN groupadd -g $D_GID bayes && \
 USER bayes
 WORKDIR $HOME
 COPY . $HOME 
-RUN --mount=type=cache,target=${HOME}/.cache/pip /usr/local/bin/pip3 install .
+RUN --mount=type=cache,target=${HOME}/.cache/pip /usr/local/bin/pip3 install '.[dev]' 
 RUN echo 'y' | plotly_get_chrome

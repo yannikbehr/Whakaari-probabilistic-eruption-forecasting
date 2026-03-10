@@ -53,7 +53,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=9.0.2,<10",
        "httpx>=0.28.1,<0.29",
-       "ipdb>=0.13.13,<0.14"]
+       "ipdb>=0.13.13,<0.14",
+       "hatch>=1.16.5,<2"]
 
 [project.scripts]
 whakaaribn_api = "whakaaribn.api:main"
