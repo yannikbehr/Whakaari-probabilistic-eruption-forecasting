@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 BACKEND_SNAKEFILES = {
-    "smile": get_data("data/workflow/smile_workflow.smk"),
-    "pgmpy": get_data("data/workflow/pgmpy_workflow.smk"),
+    "smile": get_data("data/workflow/smile_pipeline.smk"),
+    "pgmpy": get_data("data/workflow/pgmpy_pipeline.smk"),
 }
 
 
