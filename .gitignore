@@ -3,7 +3,6 @@ __pycache__
 *~
 *.png
 .vscode
-examples/data
 .cache
 .ipynb_checkpoints
 src/whakaaribn/data/*.zarr
