@@ -65,6 +65,19 @@ Optional arguments:
 | `--cores N` | `1` | Number of cores to pass to Snakemake |
 | `--clean` | `false` | Delete all output files before running |
 
+> **Note:** Generating plots requires [Google Chrome](https://www.google.com/chrome/) to be installed
+> (used by [kaleido](https://github.com/plotly/Kaleido) to export Plotly figures to PNG).
+> If Chrome is not available on your system, you can use the `scripts/build_and_benchmark.sh`
+> script instead, which runs the benchmark inside a Docker container that has Chrome pre-installed:
+>
+> ```
+> scripts/build_and_benchmark.sh --build --data /path/to/output
+> ```
+>
+> To include SMILE support in the Docker image, place your `pysmile_license.py` file in the
+> project root before building. The Dockerfile will automatically detect it and install pysmile.
+> Without the license file, the image is built without SMILE and falls back to pgmpy.
+
 ### Run the scheduled daily workflow (daemon)
 
 Run the workflow once immediately, then every day at 13:00 UTC. The default

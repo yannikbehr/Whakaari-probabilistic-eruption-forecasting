@@ -22,9 +22,11 @@ RUN apt-get update && \
     graphviz && \
     rm -rf /var/lib/apt/lists/*
 
-RUN /usr/local/bin/pip3 install --index-url https://support.bayesfusion.com/pysmile-B/ pysmile && \
-    wget https://artifactory.gns.cri.nz:443/artifactory/container-files/pysmile_license.py && \
-    cp pysmile_license.py /usr/local/lib/python3.13/site-packages
+RUN --mount=type=bind,target=/build \
+    if [ -f /build/pysmile_license.py ]; then \
+        /usr/local/bin/pip3 install --index-url https://support.bayesfusion.com/pysmile-B/ pysmile && \
+        cp /build/pysmile_license.py /usr/local/lib/python3.13/site-packages/; \
+    fi
 
 FROM base AS dev
 

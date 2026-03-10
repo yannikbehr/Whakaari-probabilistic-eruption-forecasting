@@ -18,4 +18,5 @@ examples
 sandbox.ipynb
 src/whakaaribn/data/RSAM_NZ.WIZ.10.HHZ.csv
 .nfs*
+pysmile_license.py
 
