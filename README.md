@@ -51,11 +51,19 @@ whakaaribn -h
 
 To reproduce the results from the publication you can run the benchmark workflow.
 The benchmark subcommand requires a target directory where results will be
-written. By default it writes results to `/tmp`. 
+written.
 
 ```
 whakaaribn benchmark --directory /path/to/output
 ```
+
+Optional arguments:
+
+| Argument | Default | Description |
+|---|---|---|
+| `--backend {pgmpy,smile}` | `pgmpy` | Bayesian Network backend to use |
+| `--cores N` | `1` | Number of cores to pass to Snakemake |
+| `--clean` | `false` | Delete all output files before running |
 
 ### Run the scheduled daily workflow (daemon)
 
@@ -66,8 +74,11 @@ directory is `/opt/data`.
 whakaaribn daemon
 ```
 
-To use a custom directory:
+Optional arguments:
 
-```
-whakaaribn daemon --directory /path/to/data
-```
+| Argument | Default | Description |
+|---|---|---|
+| `--directory /path/to/data` | `/opt/data` | Directory to run the workflow in |
+| `--backend {pgmpy,smile}` | `pgmpy` | Bayesian Network backend to use |
+| `--cores N` | `1` | Number of cores to pass to Snakemake |
+| `--clean` | `false` | Delete all output files before running |
