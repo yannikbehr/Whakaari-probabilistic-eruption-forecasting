@@ -24,7 +24,7 @@ build:
       when: never
     - when: always 
   script:
-    - DOCKER_BUILDKIT=1 docker build . -t "$IMAGE"
+    - DOCKER_BUILDKIT=1 docker build -f docker/Dockerfile --target app -t "$IMAGE" .
     - docker image push "$IMAGE"
 
 test:
@@ -36,7 +36,7 @@ test:
       when: never
     - when: always 
   script:
-    - docker run --rm "$IMAGE" /env/bin/pytest --pyargs whakaaribn.tests 
+    - docker run --rm "$IMAGE" hatch run test:run-pytest 
   allow_failure: true
 
 deploy-processing:
@@ -58,7 +58,7 @@ deploy-processing:
     cat > /tmp/docker_config.json <<EOF
     {
       "Image": "${IMAGE}",
-      "Cmd": ["/env/bin/bayes_daemon", "--ensemble", "--sensitivity", "--outdir", "/opt/data"],
+      "Cmd": ["whakaaribn", "daemon", "--directory", "/opt/data", "--cores", "4"],
       "HostConfig": {
         "RestartPolicy": { "Name": "always" },
         "Binds": ["whakaari_bn_data:/opt/data"]
@@ -86,7 +86,7 @@ deploy-api:
     cat > /tmp/docker_config.json <<EOF
     {
       "Image": "${IMAGE}",
-      "Cmd": ["/env/bin/whakaari_api", "--rootdir", "/opt/data"],
+      "Cmd": ["whakaaribn_api", "--rootdir", "/opt/data"],
       "HostConfig": {
         "PortBindings": { "8003/tcp": [{ "HostPort": "${API_PORT}" }] },
         "ExposedPorts": { "8003/tcp": {} },
