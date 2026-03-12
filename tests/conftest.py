@@ -1,4 +1,3 @@
-import inspect
 import os
 from datetime import datetime, timezone
 
@@ -116,10 +115,6 @@ def setup_real_data():
 
 
 @pytest.fixture()
-def setup_data_dir():
-    data_dir = os.path.join(
-        os.path.dirname(os.path.abspath(
-            inspect.getfile(inspect.currentframe()))),
-        "data",
-    )
+def setup_data_dir(request):
+    data_dir = os.path.join(str(request.config.rootdir), "tests", "data")
     return data_dir
