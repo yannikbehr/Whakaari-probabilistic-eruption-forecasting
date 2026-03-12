@@ -70,6 +70,7 @@ include = ["src/whakaaribn/data/*.json",
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 log_cli = true
+pythonpath = ["src"]
 
 [tool.ruff.lint]
 unfixable = ["F401"]
