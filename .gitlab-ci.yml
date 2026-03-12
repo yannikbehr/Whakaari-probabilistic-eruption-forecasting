@@ -36,7 +36,7 @@ test:
       when: never
     - when: always 
   script:
-    - docker run --rm "$IMAGE" hatch run test:run-pytest 
+    - docker run --rm --entrypoint /bin/bash "$IMAGE" -c "hatch run test:run-pytest"
   allow_failure: true
 
 deploy-processing:

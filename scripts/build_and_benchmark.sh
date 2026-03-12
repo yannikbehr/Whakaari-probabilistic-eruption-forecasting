@@ -24,6 +24,8 @@ CLEANALL=false
 BUILDSTAGE=app
 LOCAL=false
 BACKEND=pgmpy
+RUNTEST=false
+DEV=false
 
 
 # clean up playback files
@@ -47,6 +49,21 @@ function run_benchmark(){
 }
   
 
+function run_tests(){
+    local dev_args=()
+    local pip_prefix=""
+    if [ "${DEV}" == "true" ]; then
+        dev_args=(-v "${PROJECT_ROOT}:/home/bayes/src/whakaaribn")
+        pip_prefix="pip install -q -e '/home/bayes/src/whakaaribn[dev]' && "
+    fi
+    docker run --rm \
+        -u $(id -u):$(id -g) \
+        --entrypoint /bin/bash \
+        "${dev_args[@]+${dev_args[@]}}" \
+        ${IMAGE} -c "${pip_prefix}hatch run test:run-pytest"
+}
+
+
 function usage(){
 cat <<EOF
 Usage: $0 [Options] 
@@ -63,6 +80,12 @@ Optional Arguments:
                             running a new playback.
     --data                  Provide an alternative data root directory.
                             (Default: ${DATADIR})
+    -t, --test              Run tests inside the container using
+                            'hatch run test:run-pytest'.
+    -d, --dev               Mount the project root into the container and
+                            run 'pip install -e .[dev]' before executing.
+                            Allows iterating without rebuilding the image.
+                            Works with -t/--test and -i/--interactive.
 EOF
 }
 
@@ -72,6 +95,8 @@ do
     case "$1" in
         -b | --build) BUILD=true;;
         -i | --interactive) INTERACTIVE=true;;
+        -t | --test) RUNTEST=true;;
+        -d | --dev) DEV=true;;
         --print) PRINTEVENTS=true;;
         --backend) BACKEND="$2";shift;;
         --cleanall) CLEANALL=true;;
@@ -92,12 +117,22 @@ if [ "${BUILD}" == "true" ]; then
     -f "${PROJECT_ROOT}/docker/Dockerfile" .
 fi
 
+if [ "${RUNTEST}" == "true" ]; then
+    run_tests
+    exit 0
+fi
+
 if [ "${INTERACTIVE}" == "true" ]; then
+    dev_vol_args=()
+    if [ "${DEV}" == "true" ]; then
+        dev_vol_args=(-v "${PROJECT_ROOT}:/home/bayes/src/whakaaribn")
+    fi
     docker run -it --rm \
         -u $(id -u):$(id -g) \
         -v $DATADIR:/home/bayes/data \
+        "${dev_vol_args[@]+${dev_vol_args[@]}}" \
         --entrypoint /bin/bash \
-    ${IMAGE} 
+    ${IMAGE}
     exit 0
 fi
 

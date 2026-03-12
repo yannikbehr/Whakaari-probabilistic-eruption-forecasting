@@ -2,7 +2,12 @@
 ./whakaaribn/data/VLP
 ./docker_build_local.sh
 ./Dockerfile
-./git
+./.git
 __pycache__
 ./examples/data
 ./.cache
+./.pytest_cache
+./src/whakaaribn/data/workflow/results
+./src/whakaaribn/data/workflow/plots
+./src/whakaaribn/data/workflow/forecasts
+./src/whakaaribn/data/workflow/data
