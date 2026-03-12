@@ -62,6 +62,7 @@ whakaaribn = "whakaaribn.cli:main"
 
 [tool.hatch.build]
 include = ["src/whakaaribn/data/*.json",
+           "src/whakaaribn/data/grid_search_results.csv",
            "src/whakaaribn/data/WhiteIs_Eruption_Catalogue.csv",
            "src/whakaaribn/data/271912_Brad_Scott_GNS_Science.jpg",
            "src/whakaaribn/data/workflows/Snakefile",
@@ -70,6 +71,7 @@ include = ["src/whakaaribn/data/*.json",
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 log_cli = true
+pythonpath = ["src"] 
 
 [tool.ruff.lint]
 unfixable = ["F401"]
