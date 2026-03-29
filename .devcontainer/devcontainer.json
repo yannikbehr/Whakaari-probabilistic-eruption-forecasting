@@ -5,7 +5,11 @@
 	"build": {
 		"dockerfile": "../docker/Dockerfile",
 		"context": "..",
-		"target": "dev"
+		"target": "base",
+		"args": {
+			"D_UID": "${localEnv:D_UID}",
+			"D_GID": "${localEnv:D_GID}"
+		}
 	},
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
