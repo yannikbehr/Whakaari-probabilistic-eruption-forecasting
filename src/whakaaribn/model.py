@@ -11,7 +11,7 @@ from pgmpy.models import DiscreteBayesianNetwork
 from pgmpy.readwrite import BIFReader, BIFWriter
 from sklearn.base import BaseEstimator
 
-from whakaaribn import moving_average
+from whakaaribn import moving_average, pre_eruption_window
 
 
 class WhakaariModel(BaseEstimator):
@@ -25,18 +25,19 @@ class WhakaariModel(BaseEstimator):
         debug: bool = False,
         seed: Optional[int] = None,
         learning_method: str = "bayesian_estimation",
+        pew: int = 30,
     ):
         self.modelfile = modelfile
         self.smoothing = smoothing
         self.randomize = randomize
         self.uniformize = uniformize
         if self.randomize and self.uniformize:
-            raise ValueError(
-                "Can't randomize and uniformize at the same time.")
+            raise ValueError("Can't randomize and uniformize at the same time.")
         self.nstates = nstates
         self.debug = debug
         self.seed = seed
         self.learning_method = learning_method
+        self.pew = pew
 
     def create_network(self):
         cardinality = OrderedDict(
@@ -54,8 +55,7 @@ class WhakaariModel(BaseEstimator):
             G.add_node(node_name, states=states)
         for i in range(len(cardinality) - 1):
             for j in range(i + 1, len(cardinality)):
-                G.add_edge(list(cardinality.keys())[
-                           i], list(cardinality.keys())[j])
+                G.add_edge(list(cardinality.keys())[i], list(cardinality.keys())[j])
         model = DiscreteBayesianNetwork(G)
         cpds = self._init_cpds(model, cardinality)
         if len(cpds) > 0:
@@ -72,8 +72,7 @@ class WhakaariModel(BaseEstimator):
             parents = model.get_parents(node)
             if len(parents) < 1:
                 if self.uniformize:
-                    cpds[node] = TabularCPD.get_uniform(
-                        node, cardinality=cardinality)
+                    cpds[node] = TabularCPD.get_uniform(node, cardinality=cardinality)
                 elif self.randomize:
                     cpds[node] = TabularCPD.get_random(
                         node, cardinality=cardinality, seed=self.seed
@@ -100,7 +99,7 @@ class WhakaariModel(BaseEstimator):
         else:
             self.model = self.create_network()
         data_bin = X.copy()
-        data_bin["eruptions"] = y
+        data_bin["eruptions"] = pre_eruption_window(y, self.pew)
         # The following line is needed for sklearn compatibility,
         # but it is not used in the model itself
         self.classes_ = np.unique(y)
@@ -150,8 +149,7 @@ class WhakaariModel(BaseEstimator):
                 raise ValueError("Model not fitted or modelfile not found.")
         proba = self.model.predict_probability(X).values
         if self.smoothing is not None:
-            proba = moving_average(
-                proba, window_size=self.smoothing, axis=0, nan=False)
+            proba = moving_average(proba, window_size=self.smoothing, axis=0, nan=False)
         return proba
 
     def predict(self, X):

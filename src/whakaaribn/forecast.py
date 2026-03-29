@@ -1,10 +1,13 @@
 import logging
 from collections.abc import Sequence
+from functools import partial
 from typing import Optional
 
 import numpy as np
 import pandas as pd
 import xarray as xr
+from aitana import whakaari
+from joblib import Parallel, delayed
 from sklearn import set_config
 from sklearn.pipeline import Pipeline
 from tqdm import tqdm
@@ -14,6 +17,7 @@ from whakaaribn import (
     SequentialGroupSplit,
     pre_eruption_window,
 )
+from whakaaribn.grid_search import my_roc_auc
 from whakaaribn.model import WhakaariModel
 from whakaaribn.smile_model import PYSMILE_AVAILABLE, WhakaariSmileModel
 
@@ -45,18 +49,28 @@ def forecast(
     smoothing: Optional[int] = None,
     factor: float = 0.0,
     hindcast: bool = False,
+    compute_score: bool = False,
     model_class: type[WhakaariModel | WhakaariSmileModel] = WhakaariModel,
 ):
     """
-    Compute BN forecasts
+    Compute BN forecasts.
+
+    Parameters
+    ----------
+    compute_score : bool, optional
+        When ``True``, the modified ROC AUC score (``my_roc_auc``) is
+        computed from the forecast probabilities and stored as the scalar
+        ``"score"`` variable in the returned dataset. The eruption catalogue
+        is derived from ``data["eruptions"]``.
     """
     if model_class is WhakaariSmileModel and not PYSMILE_AVAILABLE:
         raise ImportError(
             "WhakaariSmileModel requires pysmile. "
             "Install it with: pip install --index-url https://support.bayesfusion.com/pysmile-B/ pysmile"
         )
-    wm = model_class(smoothing=smoothing, uniformize=True,
-                     nstates=len(bins) - 1)
+    wm = model_class(
+        smoothing=smoothing, uniformize=True, nstates=len(bins) - 1, pew=pew
+    )
     data_fill = data.ffill(axis=0)
     data_fill.loc["2022-07-01":, "RSAM"] = np.nan
     data_fill.loc["2022-07-01":, "Eqr"] = np.nan
@@ -69,12 +83,13 @@ def forecast(
             ("clf", wm),
         ]
     )
-    y = pre_eruption_window(data_fill["eruptions"], pew)
     cv = SequentialGroupSplit(data_fill.group)
+    y = data_fill["eruptions"]
+    eruptions = whakaari.eruptions(2, "0D", end_date=data.index[-1])
     X = data_fill.drop(columns=["eruptions", "group"])
     probs = np.zeros(X.shape[0])
     disc_data = np.full(X.shape, np.nan, dtype=float)
-
+    scores = []
     if hindcast:
         pipe.fit(X, y)
         _data_test = X.copy()
@@ -93,6 +108,15 @@ def forecast(
                 _data_test[col] = np.nan
             probs[test] = pipe.predict_proba(_data_test.iloc[test])[:, 1]
             disc_data[test, :] = pipe[:-1].transform(X.iloc[test])
+            if compute_score:
+                score = my_roc_auc(
+                    pipe,
+                    _data_test.iloc[test].ffill(),
+                    None,
+                    eruptions=eruptions,
+                    use_pew=False,
+                )
+                scores.append(score)
 
     xds = xr.Dataset(
         {
@@ -102,9 +126,11 @@ def forecast(
             "original_data": (["datetime", "type"], X.values),
             "discrete_data": (["datetime", "type"], disc_data),
             "y": (["datetime"], y.values.squeeze()),
+            "scores": (["folds"], scores),
         },
         coords={
             "datetime": X.index.tz_localize(None),
+            "folds": np.arange(len(scores)),
             "type": X.columns.astype(str),
         },
     )
@@ -117,6 +143,7 @@ def sensitivity_analysis(
     bins: tuple = (0, 5, 95, 100),
     factor: float = 0.1,
     nmodels: int = 100,
+    n_jobs: int = -1,
     model_class: type[WhakaariModel | WhakaariSmileModel] = WhakaariModel,
 ):
     """
@@ -130,12 +157,14 @@ def sensitivity_analysis(
             and (1 + factor) * old_boundary.
         nmodels: int
             Number of times to repeat sampling.
+        n_jobs: int
+            Number of parallel jobs. -1 uses all available CPUs.
         model_class: type[WhakaariModel | WhakaariSmileModel]
             Model class used for forecasting.
     """
-    fts = []
-    for i in tqdm(range(nmodels)):
-        xds = forecast(
+
+    results = Parallel(n_jobs=n_jobs)(
+        delayed(forecast)(
             data,
             pew=pew,
             bins=bins,
@@ -143,12 +172,15 @@ def sensitivity_analysis(
             factor=factor,
             model_class=model_class,
         )
-        fts.append(xds["probs"].values)
+        for _ in tqdm(range(nmodels))
+    )
+
+    fts = [xds["probs"].values for xds in results]
+    datetime_coord = results[0]["probs"].datetime.values
     xds_all = xr.DataArray(
         np.array(fts),
         dims=["model", "datetime"],
-        coords={"model": np.arange(
-            len(fts)), "datetime": xds["probs"].datetime},
+        coords={"model": np.arange(len(fts)), "datetime": datetime_coord},
     )
     return xds_all
 
@@ -156,6 +188,8 @@ def sensitivity_analysis(
 def uncertainty_analysis(
     data: pd.DataFrame,
     search_results: pd.DataFrame,
+    compute_score: bool = False,
+    n_jobs: int = -1,
     model_class: type[WhakaariModel | WhakaariSmileModel] = WhakaariModel,
 ):
     """
@@ -163,30 +197,41 @@ def uncertainty_analysis(
 
     Parameters
     ----------
+        compute_score : bool, optional
+            When ``True``, the ``my_roc_auc`` score is recomputed inside
+            :func:`forecast` (derived from the data) and used as the
+            ``model_score`` coordinate. When ``False``, the pre-stored
+            ``mean_test_mod_roc_auc_no_pew`` values from *search_results* are
+            used instead.
+        n_jobs: int
+            Number of parallel jobs. -1 uses all available CPUs.
         model_class: type[WhakaariModel | WhakaariSmileModel]
             Model class used for forecasting.
     """
+    results = Parallel(n_jobs=n_jobs)(
+        delayed(forecast)(
+            data,
+            pew=row[1]["params"]["clf__pew"],
+            bins=row[1]["params"]["discretize__bins"],
+            smoothing=30,
+            compute_score=compute_score,
+            model_class=model_class,
+        )
+        for row in tqdm(search_results.iterrows())
+    )
 
-    pews = search_results.index.get_level_values(0).unique()
-    nstates = search_results.index.get_level_values(1).unique()
-    fts = []
-    scores = []
-    for _nstates in tqdm(nstates):
-        for pew in tqdm(pews):
-            for _c in search_results.loc[(pew, _nstates)].iterrows():
-                _e = _c[1].params
-                xds = forecast(
-                    data,
-                    pew=pew,
-                    bins=_e["discretize__bins"],
-                    smoothing=30,
-                    model_class=model_class,
-                )
-                fts.append(xds["probs"].values)
-                scores.append(_c[1].mean_test_mod_roc_auc_no_pew)
+    fts = [xds["probs"].values for xds in results]
+    scores = (
+        [xds["scores"].mean() for xds in results]
+        if compute_score
+        else [
+            row[1]["mean_test_mod_roc_auc_no_pew"] for row in search_results.iterrows()
+        ]
+    )
+    datetime_coord = results[0]["probs"].datetime.values
     xds_all = xr.DataArray(
         np.array(fts),
         dims=["model_score", "datetime"],
-        coords={"model_score": scores, "datetime": xds["probs"].datetime},
+        coords={"model_score": scores, "datetime": datetime_coord},
     )
     return xds_all

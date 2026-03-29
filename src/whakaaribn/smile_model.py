@@ -9,17 +9,20 @@ from sklearn.base import BaseEstimator
 
 try:
     import pysmile
-    import pysmile_license
     from pysmile import SMILEException
+
+    import pysmile_license
+
     PYSMILE_AVAILABLE = True
 except ImportError:
     PYSMILE_AVAILABLE = False
 
-from whakaaribn import moving_average
+from whakaaribn import moving_average, pre_eruption_window
 
 
 def _require_pysmile(method):
     """Decorator that raises ImportError if pysmile is not available."""
+
     def wrapper(*args, **kwargs):
         if not PYSMILE_AVAILABLE:
             raise ImportError(
@@ -29,6 +32,7 @@ def _require_pysmile(method):
                 "Then copy your BayesFusion license file to the site-packages directory."
             )
         return method(*args, **kwargs)
+
     wrapper.__doc__ = method.__doc__
     wrapper.__name__ = method.__name__
     return wrapper
@@ -45,20 +49,21 @@ class WhakaariSmileModel(BaseEstimator):
         debug: bool = False,
         seed: Optional[int] = None,
         eq_sample_size: Optional[int] = None,
-        ex_nodes: Optional[list] = None
+        ex_nodes: Optional[list] = None,
+        pew: int = 30,
     ):
         self.modelfile = modelfile
         self.smoothing = smoothing
         self.randomize = randomize
         self.uniformize = uniformize
         if self.randomize and self.uniformize:
-            raise ValueError(
-                "Can't randomize and uniformize at the same time.")
+            raise ValueError("Can't randomize and uniformize at the same time.")
         self.nstates = nstates
         self.debug = debug
         self.seed = seed
         self.eq_sample_size = eq_sample_size
         self.ex_nodes = ex_nodes
+        self.pew = pew
 
     @_require_pysmile
     def create_network(self):
@@ -75,8 +80,9 @@ class WhakaariSmileModel(BaseEstimator):
         )
         for node in nodes.items():
             node_name, nstates = node
-            node = self.add_node(model, node_name, np.arange(
-                nstates), np.ones(nstates)/nstates)
+            node = self.add_node(
+                model, node_name, np.arange(nstates), np.ones(nstates) / nstates
+            )
         for i in range(len(nodes) - 1):
             for j in range(i + 1, len(nodes)):
                 model.add_arc(list(nodes.keys())[i], list(nodes.keys())[j])
@@ -108,7 +114,7 @@ class WhakaariSmileModel(BaseEstimator):
     def fit(self, X, y):
         self.model = self.create_network()
         data_bin = X.copy()
-        data_bin["eruptions"] = y
+        data_bin["eruptions"] = pre_eruption_window(y, self.pew)
         # The following line is needed for sklearn compatibility,
         # but it is not used in the model itself
         self.classes_ = np.unique(y)
@@ -151,8 +157,7 @@ class WhakaariSmileModel(BaseEstimator):
                 for i in range(0, len(posteriors)):
                     msg = "P({}={}) = {}"
                     msg = msg.format(
-                        nid, self.model.get_outcome_id(
-                            nhandle, i), posteriors[i]
+                        nid, self.model.get_outcome_id(nhandle, i), posteriors[i]
                     )
                     msgs.append(msg)
         return "\n".join(msgs)
@@ -195,8 +200,7 @@ class WhakaariSmileModel(BaseEstimator):
             self.model.update_beliefs()
 
         if self.smoothing is not None:
-            proba = moving_average(
-                proba, window_size=self.smoothing, axis=0, nan=False)
+            proba = moving_average(proba, window_size=self.smoothing, axis=0, nan=False)
         return proba
 
     @_require_pysmile

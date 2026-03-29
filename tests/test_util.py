@@ -35,8 +35,7 @@ def test_binning():
     df1 = df.copy()
     df1.iloc[0, 0] = np.nan
     bd1 = BinData(df1, "RSAM", 3, dropzeros=False)
-    np.testing.assert_array_equal(
-        bd1.marginals(), np.array([0.375, 0.25, 0.375]))
+    np.testing.assert_array_equal(bd1.marginals(), np.array([0.375, 0.25, 0.375]))
 
     np.testing.assert_array_equal(
         bd.query([1, 1, 5, 8.5, np.nan]),
@@ -54,8 +53,7 @@ def test_binning():
     dates3 = pd.date_range("13/11/2020", periods=150, freq="1D")
     df3 = pd.DataFrame({"RSAM": np.arange(150.0)}, index=dates3)
     bd3 = BinData(df3, "RSAM", [0, 60, 90, 100], dropzeros=False)
-    np.testing.assert_array_almost_equal(
-        bd3.marginals(), np.array([0.6, 0.3, 0.1]))
+    np.testing.assert_array_almost_equal(bd3.marginals(), np.array([0.6, 0.3, 0.1]))
 
 
 def test_binning_uncertainty():
@@ -75,27 +73,22 @@ def test_binning_uncertainty():
         factor=2.0,
         seed=42,
     )
-    np.testing.assert_array_almost_equal(
-        bd0.marginals(), [0.333, 0.333, 0.333], 3)
-    np.testing.assert_array_almost_equal(
-        bd2.marginals(), [0.333, 0.555, 0.111], 3)
-    np.testing.assert_array_almost_equal(
-        bd3.marginals(), [0.303, 0.606, 0.091], 3)
+    np.testing.assert_array_almost_equal(bd0.marginals(), [0.333, 0.333, 0.333], 3)
+    np.testing.assert_array_almost_equal(bd2.marginals(), [0.333, 0.555, 0.111], 3)
+    np.testing.assert_array_almost_equal(bd3.marginals(), [0.303, 0.606, 0.091], 3)
     assert bd0.query(6.5) == bd0.binnames[2]
     assert bd2.query(6.5) == bd2.binnames[1]
 
     b0 = Bin([0, 1.74, 5.4, 1e10], ["Low", "Medium", "High"])
     assert b0.query(1.7) == "Low"
-    b1 = Bin([0, 1.74, 5.4, 1e10], [
-             "Low", "Medium", "High"], factor=0.5, seed=42)
+    b1 = Bin([0, 1.74, 5.4, 1e10], ["Low", "Medium", "High"], factor=0.5, seed=42)
     assert b1.query(1.7) == "Medium"
 
 
 def test_binning_wo_data():
     b = Bin([0, 1.74, 5.4, 1e10], ["Low", "Medium", "High"])
     assert b.query(1.5) == "Low"
-    b1 = Bin([1e10, 0.09, -0.38, -1e10],
-             ["Increasing", "Unchanged", "Decreasing"])
+    b1 = Bin([1e10, 0.09, -0.38, -1e10], ["Increasing", "Unchanged", "Decreasing"])
     assert b1.query(1.0) == "Increasing"
     assert b1.query(-1.0) == "Decreasing"
 
@@ -108,21 +101,16 @@ def test_discretizer():
     df = pd.DataFrame({"RSAM": np.arange(9.0)}, index=dates)
     desc = Discretizer(bins=(0, 5, 95, 100))
     rv = desc.fit_transform(np.tile(np.arange(5)[:, np.newaxis], (1, 3)))
-    np.testing.assert_equal(
-        rv.iloc[:, 1].values, np.array([0, 1, 1, 1, 2])
-    )
+    np.testing.assert_equal(rv.iloc[:, 1].values, np.array([0, 1, 1, 1, 2]))
     desc1 = Discretizer(bins=(0, 5, 95, 100)).set_output(transform="pandas")
     rv1 = desc1.fit_transform(df)
     np.testing.assert_equal(
-        rv1.iloc[:, 0].values, np.array(
-            [0, 1, 1, 1, 1, 1, 1, 1, 2], dtype=float)
+        rv1.iloc[:, 0].values, np.array([0, 1, 1, 1, 1, 1, 1, 1, 2], dtype=float)
     )
 
     desc = Discretizer(bins=[0, 20, 40, 60, 80, 100])
     rv = desc.fit_transform(np.tile(np.arange(5)[:, np.newaxis], (1, 3)))
-    np.testing.assert_equal(
-        rv.iloc[:, 0].values, np.array([0, 1, 2, 3, 4])
-    )
+    np.testing.assert_equal(rv.iloc[:, 0].values, np.array([0, 1, 2, 3, 4]))
 
 
 def test_moving_average():
@@ -167,8 +155,7 @@ def test_convert_probability():
 
 
 def test_sequential_group_split():
-    groups = np.array(["a", "a", "a", "b", "b", "b",
-                      "c", "c", "c", "d", "d", "d"])
+    groups = np.array(["a", "a", "a", "b", "b", "b", "c", "c", "c", "d", "d", "d"])
     data = pd.DataFrame(
         {"x": np.arange(groups.size)},
         index=pd.date_range("2000-01-01", periods=groups.size),
@@ -189,3 +176,10 @@ def test_pre_eruption_window():
     assert 5 == np.sum(pre_eruption_window(y, 5))
     # Make sure applying the transformation twice does not change the result
     assert 5 == np.sum(pre_eruption_window(y, 5))
+    # Now test when y is a pandas Series with a datetime index
+    dates = pd.date_range("2000-01-01", periods=y.size)
+    y_series = pd.Series(y, index=dates)
+    assert 5 == np.sum(pre_eruption_window(y_series, 5))
+    assert 5 == np.sum(pre_eruption_window(y_series, 5))
+    assert 1 == y.sum()
+    assert 1 == y.sum()
