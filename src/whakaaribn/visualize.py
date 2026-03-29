@@ -6,6 +6,7 @@ from aitana import whakaari
 from plotly.subplots import make_subplots
 
 from whakaaribn import get_color, get_data
+from whakaaribn.grid_search import evaluate_threshold
 
 
 def earthquake_map(cat, size_max=15):
@@ -219,8 +220,7 @@ data_trans = {
 def composite_plot(
     prob, data, cols=["RSAM", "CO2", "TemperatureBin"], elicitation=None, fout=None
 ):
-    colors = ["rgba(123,204,196,1)", "rgba(50,136,189,1)",
-              "rgba(253,174,97,1)"]
+    colors = ["rgba(123,204,196,1)", "rgba(50,136,189,1)", "rgba(253,174,97,1)"]
     if prob is None:
         prob = pd.DataFrame(
             {
@@ -264,8 +264,7 @@ def composite_plot(
                 name=data_trans[col]["name"],
             )
         )
-        title = "{:s} {:s}".format(
-            data_trans[col]["name"], data_trans[col]["unit"])
+        title = "{:s} {:s}".format(data_trans[col]["name"], data_trans[col]["unit"])
         yaxes[i]["title"] = title
 
     forecast_timeseries(
@@ -356,8 +355,7 @@ def trellis_plot(
         for name, model in models.items():
             if name in ["min", "max", "ensemble"]:
                 continue
-            time = pd.to_datetime(model["model"]["datetime"])[
-                data.group == group_name]
+            time = pd.to_datetime(model["model"]["datetime"])[data.group == group_name]
             probs = model["model"].values[data.group == group_name]
             fig.add_trace(
                 go.Scatter(
@@ -365,8 +363,7 @@ def trellis_plot(
                     y=probs,
                     mode="lines",
                     name=name,
-                    line=dict(color=model["color"],
-                              dash=model.get("dash", "solid")),
+                    line=dict(color=model["color"], dash=model.get("dash", "solid")),
                     showlegend=showlegend,
                 ),
                 row=irow + 1,
@@ -850,10 +847,9 @@ def forecast_plot(
             col=col,
         )
     if eruptions:
-        eruptions = whakaari.eruptions(
-            1, "0D", end_date=datetime.now(timezone.utc))
+        eruptions = whakaari.eruptions(1, "0D", end_date=datetime.now(timezone.utc))
         dfe = eruptions.loc[
-            pd.to_datetime(frcst.datetime[0].values, utc=True): pd.to_datetime(
+            pd.to_datetime(frcst.datetime[0].values, utc=True) : pd.to_datetime(
                 frcst.datetime[-1].values, utc=True
             )
         ]
@@ -877,4 +873,123 @@ def forecast_plot(
 
     if log:
         fig.update_yaxes(type="log", secondary_y=False)
+    return fig
+
+
+def validation_plot(
+    fcst: pd.Series,
+    threshold: float,
+    showlegend: bool = False,
+    debug: bool = False,
+    fig=None,
+    row: int = 0,
+    col: int = 1,
+):
+    """
+    Plot the forecast probabilities and the evaluation windows.
+
+    Arguments:
+    ----------
+        fcst: pandas.DataFrame
+            The forecast probabilities.
+        threshold: float
+            The threshold value.
+        debug: bool, optional
+            Whether to print debug information.
+        fig: plotly Figure, optional
+            The figure to add the plot to. If None, a new figure is created.
+        row: int, optional
+            The row to add the plot to.
+        col: int, optional
+            The column to add the plot to.
+    """
+    try:
+        fcst.index = fcst.index.tz_localize("UTC")
+    except TypeError:
+        pass
+    time = fcst.index
+    eruptions = whakaari.eruptions(2, "0D", end_date=time[-1]).loc[time[0] : time[-1]]
+    trace = pd.DataFrame(
+        {
+            "prob": (fcst - fcst.min()) / (fcst.max() - fcst.min()),
+            "eruptions": eruptions["Activity_Scale"].reindex(time, fill_value=0),
+        },
+        index=time,
+    )
+    stats_, time_windows = evaluate_threshold(
+        threshold, trace, pew=None, return_windows=True
+    )
+    if debug:
+        print(stats_)
+    if fig is None:
+        fig = make_subplots(rows=0, cols=1, specs=[[{"secondary_y": True}]])
+
+    showlegend = showlegend
+    for i in range(len(eruptions.index)):
+        fig.add_trace(
+            go.Scatter(
+                x=[eruptions.index[i], eruptions.index[i]],
+                y=[0.0, 0.7],
+                mode="lines",
+                line_width=0.7,
+                line_color="black",
+                name="Observed Eruption",
+                showlegend=showlegend,
+            ),
+            secondary_y=False,
+            row=row,
+            col=col,
+        )
+        showlegend = False
+    cl_ = dict(
+        true_positive=get_color(-1),
+        true_negative=get_color(2),
+        false_positive=get_color(1),
+        false_negative=get_color(3),
+    )
+    for window in time_windows:
+        start = window["start"]
+        end = window["end"]
+        type_ = window["type"]
+
+        # Mask the time series within the current window
+        mask = (time >= start) & (time <= end)
+        x_window = time[mask]
+        y_window = trace["prob"][mask]
+
+        # Choose color based on the type
+        color = cl_[type_]
+
+        # Add a trace for the shaded area
+        fig.add_trace(
+            go.Scatter(
+                x=list(x_window) + list(x_window[::-1]),  # x-coordinates for fill
+                y=list(y_window)
+                + [threshold] * len(y_window),  # y-coordinates for fill
+                fill="toself",
+                fillcolor=color,
+                line=dict(color="rgba(254,255,255,0)"),  # No line around fill
+                hoverinfo="skip",
+                showlegend=False,
+            ),
+            row=row,
+            col=col,
+        )
+    for type_, color in cl_.items():
+        fig.add_trace(
+            go.Scatter(
+                x=[None],  # Dummy x value
+                y=[None],  # Dummy y value
+                mode="markers",
+                marker=dict(size=9, color=color),
+                name=f"{type_.capitalize()}",
+                showlegend=showlegend,
+            ),
+            row=row,
+            col=col,
+        )
+
+    fig.update_yaxes(
+        showticklabels=False, showgrid=False, secondary_y=True, row=row, col=col
+    )
     return fig
