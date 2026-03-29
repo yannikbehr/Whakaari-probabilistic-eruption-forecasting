@@ -1,0 +1,233 @@
+import warnings
+import numpy as np
+import pandas as pd
+from datetime import datetime, timezone
+
+from whakaaribn.smile_model import PYSMILE_AVAILABLE
+
+# ---------------------------------------------------------------------------
+# Configuration
+#   Default : snakemake --snakefile pipeline.smk --cores 10
+#   SMILE   : snakemake --snakefile pipeline.smk --cores 10 --config model=smile
+# ---------------------------------------------------------------------------
+MODEL = config.get("model", "pgmpy")
+
+if MODEL not in ("pgmpy", "smile"):
+    raise ValueError(f"Unknown model '{MODEL}'. Choose 'pgmpy' or 'smile'.")
+
+if MODEL == "smile" and not PYSMILE_AVAILABLE:
+    warnings.warn(
+        "pysmile is not available — falling back to the pgmpy model. "
+        "To use the SMILE backend, install pysmile:\n"
+        "  pip install --index-url https://support.bayesfusion.com/pysmile-B/ pysmile\n"
+        "and copy your BayesFusion license file to the site-packages directory.",
+        stacklevel=1,
+    )
+    MODEL = "pgmpy"
+
+PREFIX = MODEL + "_"
+
+STARTDATE = datetime(2009, 1, 1, tzinfo=timezone.utc)
+ENDDATE = datetime(2024, 9, 10, tzinfo=timezone.utc),
+
+include: "rules/data.smk"
+
+
+rule all:
+    input:
+        f"plots/{PREFIX}eruption_forecasts_whakaari.png",
+        f"plots/{PREFIX}model_objective_function.png",
+        f"plots/{PREFIX}forecast_sensitivity.png",
+        f"plots/{PREFIX}forecast_uncertainty.png",
+        f"plots/{PREFIX}forecast_ensemble.png",
+        "plots/whakaari_data_plot.png",
+        "plots/whakaari_island_and_graphs.png",
+        f"plots/{PREFIX}eruption_forecasts_whakaari_hindcast.png",
+        f"plots/{PREFIX}whakaari_validation_plot.png",
+
+
+rule grid_search:
+    input:
+        "data/whakaari_data_with_groups.csv",
+    output:
+        f"results/{PREFIX}grid_search_results.csv",
+    run:
+        from whakaaribn.grid_search import grid_search
+        if MODEL == "smile":
+            from whakaaribn.smile_model import WhakaariSmileModel
+            model_class = WhakaariSmileModel
+        else:
+            from whakaaribn.model import WhakaariModel
+            model_class = WhakaariModel
+        data = pd.read_csv(input[0], parse_dates=True, index_col=0)
+        params_gcv = [
+            {"discretize__bins": [[0, 5, 100], [0, 50, 100], [0, 95, 100]],
+             "clf__nstates": [2], "clf__pew": np.arange(10, 110, 10)},
+            {"discretize__bins": [[0, 5, 95, 100], [0, 33, 66, 100], [0, 25, 75, 100]],
+             "clf__nstates": [3], "clf__pew": np.arange(10, 110, 10)},
+            {"discretize__bins": [[0, 25, 50, 75, 100], [0, 5, 50, 95, 100], [0, 10, 50, 90, 100], [0, 20, 50, 80, 100]],
+             "clf__nstates": [4], "clf__pew": np.arange(10, 110, 10)},
+            {"discretize__bins": [[0, 20, 40, 60, 80, 100], [0, 5, 20, 80, 95, 100], [0, 5, 25, 75, 95, 100]],
+             "clf__nstates": [5], "clf__pew": np.arange(10, 110, 10)},
+        ]
+        search_results = grid_search(data, params_gcv,  recompute=True, njobs=10,
+                                     model_class=model_class)
+        search_results.to_csv(output[0], index=False)
+
+
+rule forecast:
+    input:
+        "data/whakaari_data_with_groups.csv",
+        f"results/{PREFIX}grid_search_results.csv",
+    output:
+        f"forecasts/{PREFIX}whakaari_forecasts_{{label}}.nc",
+        f"forecasts/{PREFIX}whakaari_forecasts_{{label}}_hindcast.nc",
+    run:
+        from whakaaribn.forecast import forecast
+        from whakaaribn.grid_search import get_best_estimator
+        if MODEL == "smile":
+            from whakaaribn.smile_model import WhakaariSmileModel
+            model_class = WhakaariSmileModel
+        else:
+            from whakaaribn.model import WhakaariModel
+            model_class = WhakaariModel
+        forecast_params = {
+            "all_data": [],
+            "seismic": ["SO2", "H2S", "CO2"],
+            "gas": ["RSAM", "Eqr"],
+        }
+        bins, pew = get_best_estimator(input[1])
+        data = pd.read_csv(input[0], parse_dates=True, index_col=0)
+        xds = forecast(data, bins=bins, pew=pew, smoothing=30,
+                       exclude_from_test=forecast_params[wildcards.label],
+                       model_class=model_class)
+        xds.to_netcdf(output[0])
+        data = pd.read_csv(input[0], parse_dates=True, index_col=0)
+        xds_hindcast = forecast(data, bins=bins, pew=pew, smoothing=30,
+                                exclude_from_test=forecast_params[wildcards.label],
+                                hindcast=True, model_class=model_class)
+        xds_hindcast.to_netcdf(output[1])
+
+
+rule validation_plot:
+    input:
+        forecast=f"forecasts/{PREFIX}whakaari_forecasts_all_data.nc",
+        data="data/whakaari_data_with_groups.csv",
+    output:
+        f"plots/{PREFIX}whakaari_validation_plot.png",
+    log:
+        notebook=f"logs/notebooks/{PREFIX}validation_plots.ipynb",
+    notebook:
+        "notebooks/validation_plots.py.ipynb"
+
+
+rule sensitivity:
+    input:
+        "data/whakaari_data_with_groups.csv",
+        f"results/{PREFIX}grid_search_results.csv",
+    output:
+        f"forecasts/{PREFIX}whakaari_sensitivity.nc",
+    run:
+        from whakaaribn.forecast import sensitivity_analysis
+        from whakaaribn.grid_search import get_best_estimator
+        if MODEL == "smile":
+            from whakaaribn.smile_model import WhakaariSmileModel
+            model_class = WhakaariSmileModel
+        else:
+            from whakaaribn.model import WhakaariModel
+            model_class = WhakaariModel
+        bins, pew = get_best_estimator(input[1])
+        data = pd.read_csv(input[0], parse_dates=True, index_col=0)
+        xds_sensitivity = sensitivity_analysis(data, pew=pew, bins=bins,
+                                               model_class=model_class, n_jobs=10)
+        xds_sensitivity.to_netcdf(output[0])
+
+
+rule uncertainty:
+    input:
+        f"results/{PREFIX}grid_search_results.csv",
+        "data/whakaari_data_with_groups.csv",
+    output:
+        f"forecasts/{PREFIX}whakaari_uncertainty.nc",
+    run:
+        from whakaaribn.forecast import uncertainty_analysis
+        if MODEL == "smile":
+            from whakaaribn.smile_model import WhakaariSmileModel
+            model_class = WhakaariSmileModel
+        else:
+            from whakaaribn.model import WhakaariModel
+            model_class = WhakaariModel
+        data = pd.read_csv(input[1], parse_dates=True, index_col=0)
+        grid_search_results = pd.read_csv(input[0], index_col=(0, 1, 2),
+                                          converters={"params": eval})
+        xds_uncertainty = uncertainty_analysis(data, grid_search_results,
+                                               model_class=model_class, n_jobs=10)
+        xds_uncertainty.to_netcdf(output[0])
+
+
+rule forecast_plots:
+    input:
+        forecast_all_data=f"forecasts/{PREFIX}whakaari_forecasts_all_data.nc",
+        forecast_seismic=f"forecasts/{PREFIX}whakaari_forecasts_seismic.nc",
+        forecast_gas=f"forecasts/{PREFIX}whakaari_forecasts_gas.nc",
+        forecast_all_data_hindcast=f"forecasts/{PREFIX}whakaari_forecasts_all_data_hindcast.nc",
+        forecast_seismic_hindcast=f"forecasts/{PREFIX}whakaari_forecasts_seismic_hindcast.nc",
+        forecast_gas_hindcast=f"forecasts/{PREFIX}whakaari_forecasts_gas_hindcast.nc",
+        data="data/whakaari_data_with_groups.csv",
+    output:
+        eruption_forecasts=f"plots/{PREFIX}eruption_forecasts_whakaari.png",
+        eruption_forecasts_hindcast=f"plots/{PREFIX}eruption_forecasts_whakaari_hindcast.png",
+    log:
+        notebook=f"logs/notebooks/{PREFIX}forecast_plots.ipynb",
+    notebook:
+        "notebooks/forecast_plots.py.ipynb"
+
+
+rule objective_function_plot:
+    input:
+        grid_search_results=f"results/{PREFIX}grid_search_results.csv",
+    output:
+        model_objective_function=f"plots/{PREFIX}model_objective_function.png",
+    log:
+        notebook=f"logs/notebooks/{PREFIX}objective_function_plot.ipynb",
+    notebook:
+        "notebooks/objective_function_plot.py.ipynb"
+
+
+rule sensitivity_plot:
+    input:
+        forecast_all_data=f"forecasts/{PREFIX}whakaari_forecasts_all_data.nc",
+        forecast_sensitivity=f"forecasts/{PREFIX}whakaari_sensitivity.nc",
+        data="data/whakaari_data_with_groups.csv",
+    output:
+        forecast_sensitivity_plot=f"plots/{PREFIX}forecast_sensitivity.png",
+    log:
+        notebook=f"logs/notebooks/{PREFIX}sensitivity_plot.ipynb",
+    notebook:
+        "notebooks/sensitivity_plot.py.ipynb"
+
+
+rule uncertainty_plot:
+    input:
+        forecast_all_data=f"forecasts/{PREFIX}whakaari_forecasts_all_data.nc",
+        forecast_uncertainty=f"forecasts/{PREFIX}whakaari_uncertainty.nc",
+        data="data/whakaari_data_with_groups.csv",
+    output:
+        forecast_uncertainty_plot=f"plots/{PREFIX}forecast_uncertainty.png",
+    log:
+        notebook=f"logs/notebooks/{PREFIX}uncertainty_plot.ipynb",
+    notebook:
+        "notebooks/uncertainty_plot.py.ipynb"
+
+
+rule ensemble_plot:
+    input:
+        forecast_all_data=f"forecasts/{PREFIX}whakaari_forecasts_all_data.nc",
+        forecast_uncertainty=f"forecasts/{PREFIX}whakaari_uncertainty.nc",
+        data="data/whakaari_data_with_groups.csv",
+    output:
+        forecast_ensemble_plot=f"plots/{PREFIX}forecast_ensemble.png",
+    log:
+        notebook=f"logs/notebooks/{PREFIX}ensemble_plot.ipynb",
+    notebook:
+        "notebooks/ensemble_plot.py.ipynb"
