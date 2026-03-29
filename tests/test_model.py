@@ -40,8 +40,8 @@ def test_fit():
     eruptions = train_data["eruptions"]
     train_data = train_data.drop("eruptions", axis=1)
     predict_data = data.iloc[int(0.8 * npts) :]
-    ml1 = WhakaariModel(uniformize=True)
-    ml1.fit(train_data, eruptions)
+    ml1 = WhakaariModel(uniformize=True, pew=0)
+    ml1.fit(train_data, eruptions.astype(float))
     predict_data = predict_data.drop("eruptions", axis=1)
     predictions = ml1.predict_proba(predict_data)
     assert (
@@ -64,12 +64,15 @@ def test_pipeline():
     pipe = Pipeline(
         [
             ("discretize", Discretizer()),
-            ("clf", WhakaariModel(uniformize=True, smoothing=30)),
+            ("clf", WhakaariModel(uniformize=True, smoothing=30, pew=0)),
         ]
     )
     ml = WhakaariModel(randomize=True, seed=42)
     data = ml.simulate(n_samples=1000, mode="continuous")
-    pipe.fit(data.drop("eruptions", axis=1).iloc[:800], data["eruptions"].iloc[:800])
+    pipe.fit(
+        data.drop("eruptions", axis=1).iloc[:800],
+        data["eruptions"].iloc[:800].astype(float),
+    )
     predictions = pipe.predict_proba(data.drop("eruptions", axis=1).iloc[800:])
     assert (
         abs(
@@ -98,8 +101,8 @@ def test_bayesian_estimator():
     eruptions = train_data["eruptions"]
     train_data = train_data.drop("eruptions", axis=1)
     predict_data = data_masked.iloc[int(0.8 * npts) :]
-    ml1 = WhakaariModel(uniformize=True)
-    ml1.fit(train_data, eruptions, method="bayesian_estimation")
+    ml1 = WhakaariModel(uniformize=True, pew=0)
+    ml1.fit(train_data, eruptions.astype(float), method="bayesian_estimation")
     predict_data = predict_data.drop("eruptions", axis=1)
     predictions = ml1.model.predict_probability(predict_data)
     assert predictions.shape[0] == predict_data.shape[0]

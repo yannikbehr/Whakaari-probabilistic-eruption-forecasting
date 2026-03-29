@@ -2,12 +2,13 @@ import inspect
 import os
 from datetime import datetime, timezone
 
+import pandas as pd
 import pytest
 from aitana import whakaari
 from fastapi.testclient import TestClient
 from tonik import Storage, generate_test_data
 
-from whakaaribn import assign_group_labels
+from whakaaribn import assign_group_labels, get_data
 from whakaaribn.model import WhakaariModel
 
 
@@ -24,15 +25,13 @@ def pytest_addoption(parser):
 
 
 def pytest_configure(config):
-    config.addinivalue_line(
-        "markers", "webservice: mark tests that test webserivces")
+    config.addinivalue_line("markers", "webservice: mark tests that test webserivces")
     config.addinivalue_line("markers", "slow: mark test as slow to run")
 
 
 def pytest_collection_modifyitems(config, items):
     if not config.getoption("--runwebservice"):
-        skip_webservice = pytest.mark.skip(
-            reason="need --runwebservice option to run")
+        skip_webservice = pytest.mark.skip(reason="need --runwebservice option to run")
         for item in items:
             if "webservice" in item.keywords:
                 item.add_marker(skip_webservice)
@@ -87,28 +86,22 @@ def setup_simulated_data():
     ml = WhakaariModel(randomize=True, seed=42)
     data = ml.simulate(n_samples=1000, mode="continuous")
     # assign groups 'a' to 'e' to the data, each group has 200 samples
-    data["group"] = ["a"] * 200 + ["b"] * 200 + \
-        ["c"] * 200 + ["d"] * 200 + ["e"] * 200
+    data["group"] = ["a"] * 200 + ["b"] * 200 + ["c"] * 200 + ["d"] * 200 + ["e"] * 200
     return data
 
 
 @pytest.fixture()
 def setup_real_data():
-    start_date = datetime(2009, 1, 1, tzinfo=timezone.utc)
-    end_date = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    data = whakaari.load_all(
-        fill_method=None,
-        start_date=start_date,
-        end_date=end_date,
-        ignore_data=("LP", "VLP"),
-        fuse_so2=False,
+    data = pd.read_csv(
+        get_data("data/whakaaribn_data_release_v2.2.csv"), parse_dates=True, index_col=0
     )
-    eruptions = whakaari.eruptions(2, "0D", end_date=end_date)
+    data.index = data.index.tz_localize("UTC")
+    eruptions = whakaari.eruptions(2, "0D", end_date=data.index[-1])
     data_with_groups = assign_group_labels(
         data,
         eruptions,
-        startdate=start_date,
-        enddate=end_date,
+        startdate=data.index[0],
+        enddate=data.index[-1],
         ndays=30,
         min_interval=360,
     )

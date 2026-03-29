@@ -24,7 +24,7 @@ def test_forecasts_w_real_data(tmp_path, setup_real_data):
     xds = forecast(
         data, pew=30, bins=(0, 5, 20, 80, 95, 100), smoothing=30, compute_score=True
     )
-    assert xds.probs.shape[0] == 1000
+    assert xds.probs.shape[0] == 5732
     assert xds.probs.min() >= 0
     assert xds.probs.max() <= 1
 

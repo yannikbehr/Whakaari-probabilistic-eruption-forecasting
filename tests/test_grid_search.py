@@ -80,7 +80,7 @@ def test_roc_auc(setup_real_data):
     pipe = Pipeline(
         [
             ("discretize", Discretizer()),
-            ("clf", WhakaariModel(smoothing=30, uniformize=True, pew=0)),
+            ("clf", WhakaariModel(smoothing=30, uniformize=True, pew=30)),
         ]
     )
     pipe.set_output(transform="pandas")
@@ -88,10 +88,10 @@ def test_roc_auc(setup_real_data):
     pipe.fit(X_train.ffill(), y_train)
     eruptions = whakaari.eruptions(2, "0D", end_date=data.index[-1])
     score = my_roc_auc(pipe, X_train.ffill(), None, eruptions=eruptions, use_pew=False)
-    assert abs(score - 0.59) < 0.005
+    assert abs(score - 0.95) < 0.005
 
 
-# @pytest.mark.slow
+@pytest.mark.slow
 def test_grid_search(setup_simulated_data):
     data = setup_simulated_data
     params_gcv = [
@@ -115,4 +115,4 @@ def test_best_estimator(setup_data_dir):
     search_results = os.path.join(data_dir, "grid_search_results.csv")
     bins, pew = get_best_estimator(search_results)
     assert bins == [0, 5, 20, 80, 95, 100]
-    assert pew == 80
+    assert pew == 40
