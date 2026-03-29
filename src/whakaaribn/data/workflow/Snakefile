@@ -11,26 +11,21 @@ from whakaaribn.smile_model import PYSMILE_AVAILABLE
 #   SMILE   : snakemake --snakefile pipeline.smk --cores 10 --config model=smile
 # ---------------------------------------------------------------------------
 MODEL = config.get("model", "pgmpy")
+N_JOBS = config.get("n_jobs", 1)
 
 if MODEL not in ("pgmpy", "smile"):
     raise ValueError(f"Unknown model '{MODEL}'. Choose 'pgmpy' or 'smile'.")
 
 if MODEL == "smile" and not PYSMILE_AVAILABLE:
-    warnings.warn(
-        "pysmile is not available — falling back to the pgmpy model. "
-        "To use the SMILE backend, install pysmile:\n"
-        "  pip install --index-url https://support.bayesfusion.com/pysmile-B/ pysmile\n"
-        "and copy your BayesFusion license file to the site-packages directory.",
-        stacklevel=1,
+    raise RuntimeError(
+        "pysmile is not available — cannot use the SMILE backend. "
+        "Install pysmile and copy your BayesFusion license file, or use --backend pgmpy."
     )
-    MODEL = "pgmpy"
 
 PREFIX = MODEL + "_"
 
 STARTDATE = datetime(2009, 1, 1, tzinfo=timezone.utc)
 ENDDATE = datetime(2024, 9, 10, tzinfo=timezone.utc),
-
-include: "rules/data.smk"
 
 
 rule all:
@@ -44,6 +39,50 @@ rule all:
         "plots/whakaari_island_and_graphs.png",
         f"plots/{PREFIX}eruption_forecasts_whakaari_hindcast.png",
         f"plots/{PREFIX}whakaari_validation_plot.png",
+
+
+rule download:
+    output:
+        "data/whakaari_data.csv"
+    run:
+        import pandas as pd
+        from whakaaribn import get_data
+        data = pd.read_csv(get_data("data/whakaaribn_data_release_v2.2.csv"), parse_dates=True, index_col=0)
+        data.index = data.index.tz_localize("UTC")
+        data.to_csv("data/whakaari_data.csv")
+
+rule assign_groups:
+    input:
+        "data/whakaari_data.csv"
+    output:
+        "data/whakaari_data_with_groups.csv"
+    run:
+        from aitana import whakaari
+        from whakaaribn.util import assign_group_labels
+        data = pd.read_csv(input[0], parse_dates=True, index_col=0)
+        eruptions = whakaari.eruptions(2, "0D", end_date=data.index[-1])
+        data_with_groups = assign_group_labels(data, eruptions,
+        startdate=data.index[0], enddate=data.index[-1],
+        ndays=30, min_interval=360)
+        data_with_groups.to_csv(output[0])
+
+rule data_plot:
+    input:
+        "data/whakaari_data_with_groups.csv"
+    output:
+        "plots/whakaari_data_plot.png"
+    log:
+        notebook="logs/notebooks/data_plot.ipynb"
+    notebook:
+        "notebooks/data_plot.py.ipynb"
+
+rule overview_plot:
+    output:
+        "plots/whakaari_island_and_graphs.png"
+    log:
+        notebook="logs/notebooks/overview_plot.ipynb"
+    notebook:
+        "notebooks/overview_plot.py.ipynb"
 
 
 rule grid_search:
@@ -139,7 +178,7 @@ rule sensitivity:
         bins, pew = get_best_estimator(input[1])
         data = pd.read_csv(input[0], parse_dates=True, index_col=0)
         xds_sensitivity = sensitivity_analysis(data, pew=pew, bins=bins,
-                                               model_class=model_class, n_jobs=10)
+                                               model_class=model_class, n_jobs=N_JOBS)
         xds_sensitivity.to_netcdf(output[0])
 
 
@@ -161,7 +200,7 @@ rule uncertainty:
         grid_search_results = pd.read_csv(input[0], index_col=(0, 1, 2),
                                           converters={"params": eval})
         xds_uncertainty = uncertainty_analysis(data, grid_search_results,
-                                               model_class=model_class, n_jobs=10)
+                                               model_class=model_class, n_jobs=N_JOBS)
         xds_uncertainty.to_netcdf(output[0])
 
 

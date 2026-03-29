@@ -13,12 +13,6 @@ from whakaaribn import get_data
 logger = logging.getLogger(__name__)
 
 
-BACKEND_SNAKEFILES = {
-    "smile": get_data("data/workflow/smile_pipeline.smk"),
-    "pgmpy": get_data("data/workflow/pgmpy_pipeline.smk"),
-}
-
-
 def _prepare_workflow_directory(snakefile: str, directory: str) -> str:
     """Copy the snakefile, rules/, and notebooks/ into *directory* if it differs
     from the bundled workflow directory.  Returns the path to the snakefile that
@@ -32,7 +26,7 @@ def _prepare_workflow_directory(snakefile: str, directory: str) -> str:
 
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    for subdir in ("rules", "notebooks"):
+    for subdir in ("notebooks",):
         src = workflow_dir / subdir
         dst = target_dir / subdir
         if src.exists():
@@ -45,15 +39,19 @@ def _prepare_workflow_directory(snakefile: str, directory: str) -> str:
     return str(dst_snakefile)
 
 
-def _run_snakemake(snakefile: str = None, directory: str = None, cores: int = 1,
-                   check=False, extra_args: Sequence[str] | None = None,
-                   backend: str = "pgmpy", clean: bool = False):
+def _run_snakemake(
+    snakefile: str = None,
+    directory: str = None,
+    cores: int = 1,
+    check=False,
+    extra_args: Sequence[str] | None = None,
+    clean: bool = False,
+):
     """Invoke snakemake with the bundled workflow in the given directory."""
     if snakefile is None:
-        snakefile = BACKEND_SNAKEFILES.get(backend)
+        snakefile = get_data("data/workflow/Snakefile")
         if snakefile is None:
-            raise ValueError(
-                f"Unknown backend '{backend}'. Choose from: {list(BACKEND_SNAKEFILES)}.")
+            raise ValueError("Can't find pipeline file")
     if directory is None:
         directory = get_data("data/workflow")
     snakefile = _prepare_workflow_directory(snakefile, directory)
@@ -70,39 +68,56 @@ def _run_snakemake(snakefile: str = None, directory: str = None, cores: int = 1,
         cmd.append("--delete-all-output")
     if extra_args:
         cmd.extend(extra_args)
+    subprocess.run(
+        cmd,
+        check=check,
+    )
+
+
+def _unlock_snakemake(snakefile: str, directory: str) -> None:
+    """Run ``snakemake --unlock`` to release a stale lock from an interrupted run."""
+    cmd = ["snakemake", "--snakefile", snakefile, "--directory", directory, "--unlock"]
     try:
-        subprocess.run(
-            cmd,
-            check=check,
-        )
+        subprocess.run(cmd, check=False)
     except Exception as e:
-        print(e)
-        sys.exit(1)
-    sys.exit(0)
+        logger.warning("snakemake --unlock failed: %s", e)
 
 
 def run_benchmark(directory, backend="pgmpy", cores=1, clean=False):
     """Run the snakemake benchmark workflow in the given directory."""
-    _run_snakemake(directory=directory, check=True,
-                   backend=backend, cores=cores, clean=clean)
+    _run_snakemake(
+        directory=directory,
+        check=True,
+        cores=cores,
+        clean=clean,
+        extra_args=["--config", f"model={backend}", f"n_jobs={cores}"],
+    )
 
 
-def _run_workflow(directory, backend="pgmpy", cores=1, clean=False):
+def _run_monitoring_workflow(directory, cores=1, clean=False):
     """Run the snakemake workflow in the given directory."""
     try:
         snakefile = get_data("data/workflow/monitoring_pipeline.smk")
-        _run_snakemake(snakefile=snakefile, directory=directory, check=True,
-                       backend=backend, cores=cores, clean=clean,
-                       extra_args=["--forcerun", "live_data"])
+        resolved_snakefile = _prepare_workflow_directory(snakefile, directory)
+        _unlock_snakemake(resolved_snakefile, directory)
+        _run_snakemake(
+            snakefile=snakefile,
+            directory=directory,
+            check=True,
+            cores=cores,
+            clean=clean,
+            extra_args=["--forcerun", "live_data"],
+        )
     except subprocess.CalledProcessError as e:
         logger.error("Workflow run failed: %s", e)
 
 
 def daemon(directory, backend="pgmpy", cores=1, clean=False):
     """Start a scheduled job running the workflow in regular intervals."""
-    _run_workflow(directory, backend=backend, cores=cores, clean=clean)
+    _run_monitoring_workflow(directory, cores=cores, clean=clean)
     schedule.every().day.at("13:00").do(
-        _run_workflow, directory=directory, backend=backend, cores=cores, clean=clean)
+        _run_monitoring_workflow, directory=directory, cores=cores, clean=clean
+    )
 
     while True:
         schedule.run_pending()
@@ -112,8 +127,7 @@ def daemon(directory, backend="pgmpy", cores=1, clean=False):
 def main(argv=None):
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Whakaari BN command line interface")
+    parser = argparse.ArgumentParser(description="Whakaari BN command line interface")
     subparsers = parser.add_subparsers(dest="command")
 
     benchmark_parser = subparsers.add_parser(
@@ -126,7 +140,7 @@ def main(argv=None):
     )
     benchmark_parser.add_argument(
         "--backend",
-        choices=list(BACKEND_SNAKEFILES),
+        choices=("pgmpy", "smile"),
         default="pgmpy",
         help="Backend to use for the workflow [default: pgmpy]",
     )
@@ -152,12 +166,6 @@ def main(argv=None):
         help="Directory to run the workflow in [default: /opt/data]",
     )
     daemon_parser.add_argument(
-        "--backend",
-        choices=list(BACKEND_SNAKEFILES),
-        default="pgmpy",
-        help="Backend to use for the workflow [default: pgmpy]",
-    )
-    daemon_parser.add_argument(
         "--cores",
         type=int,
         default=1,
@@ -173,11 +181,11 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     if args.command == "benchmark":
-        run_benchmark(args.directory, backend=args.backend,
-                      cores=args.cores, clean=args.clean)
+        run_benchmark(
+            args.directory, backend=args.backend, cores=args.cores, clean=args.clean
+        )
     elif args.command == "daemon":
-        daemon(args.directory, backend=args.backend,
-               cores=args.cores, clean=args.clean)
+        daemon(args.directory, backend=args.backend, cores=args.cores, clean=args.clean)
     else:
         parser.print_help()
         sys.exit(1)

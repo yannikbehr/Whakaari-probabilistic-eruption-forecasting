@@ -114,7 +114,7 @@ if [ "${BUILD}" == "true" ]; then
     DOCKER_BUILDKIT=1 docker build --target ${BUILDSTAGE} -t "${IMAGE}" \
     --build-arg D_UID=$(id -u) \
     --build-arg D_GID=$(id -g) \
-    -f "${PROJECT_ROOT}/docker/Dockerfile" .
+    -f "${PROJECT_ROOT}/docker/Dockerfile" "${PROJECT_ROOT}"
 fi
 
 if [ "${RUNTEST}" == "true" ]; then

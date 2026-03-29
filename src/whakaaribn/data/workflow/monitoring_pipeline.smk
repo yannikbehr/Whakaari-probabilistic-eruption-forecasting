@@ -4,7 +4,7 @@ import pandas as pd
 
 STARTDATE=datetime(2009, 1, 1, tzinfo=timezone.utc)
 
-include: "rules/data.smk"
+N_JOBS = config.get("n_jobs", 1)
 
 rule all:
     input:
@@ -49,17 +49,20 @@ rule grid_search:
         "results/grid_search_results.csv"
     run:
         from whakaaribn.grid_search import grid_search
+        import numpy as np
         data = pd.read_csv(input[0], parse_dates=True, index_col=0)
-        params_gcv = {2: {'discretize__bins': [[0, 5, 100], [0, 50, 100], [0, 95, 100]],
-                          'clf__nstates': [2, 2, 2]},
-                      3: {'discretize__bins': [[0, 5, 95, 100], [0, 33, 66, 100], [0, 25, 75, 100]],
-                          'clf__nstates': [3, 3, 3]},
-                      4: {'discretize__bins': [[0, 25, 50, 75, 100], [0, 5, 50, 95, 100], [0, 10, 50, 90, 100], [0, 20, 50, 80, 100]],
-                          'clf__nstates': [4, 4, 4, 4]},
-                      5: {'discretize__bins': [[0, 20, 40, 60, 80, 100], [0, 5, 20, 80, 95, 100], [0, 5, 25, 75, 95, 100]],
-                          'clf__nstates': [5, 5, 5]}}  
-        grid_search(data, params_gcv, fout=output[0], recompute=True, njobs=10)
-
+        params_gcv = [
+            {"discretize__bins": [[0, 5, 100], [0, 50, 100], [0, 95, 100]],
+             "clf__nstates": [2], "clf__pew": np.arange(10, 110, 10)},
+            {"discretize__bins": [[0, 5, 95, 100], [0, 33, 66, 100], [0, 25, 75, 100]],
+             "clf__nstates": [3], "clf__pew": np.arange(10, 110, 10)},
+            {"discretize__bins": [[0, 25, 50, 75, 100], [0, 5, 50, 95, 100], [0, 10, 50, 90, 100], [0, 20, 50, 80, 100]],
+             "clf__nstates": [4], "clf__pew": np.arange(10, 110, 10)},
+            {"discretize__bins": [[0, 20, 40, 60, 80, 100], [0, 5, 20, 80, 95, 100], [0, 5, 25, 75, 95, 100]],
+             "clf__nstates": [5], "clf__pew": np.arange(10, 110, 10)},
+        ]
+        search_results = grid_search(data, params_gcv, recompute=True, njobs=N_JOBS)
+        search_results.to_csv(output[0], index=False)
 
 rule forecast:
     input:
@@ -85,7 +88,7 @@ rule uncertainty:
         from whakaaribn.forecast import uncertainty_analysis
         data = pd.read_csv(input[1], parse_dates=True, index_col=0)
         grid_search_results = pd.read_csv(input[0], index_col=(0, 1, 2), converters={"params": eval})
-        xds_uncertainty = uncertainty_analysis(data, grid_search_results)
+        xds_uncertainty = uncertainty_analysis(data, grid_search_results, n_jobs=N_JOBS)
         xds_uncertainty.to_netcdf(output[0])
 
 rule save_results:
