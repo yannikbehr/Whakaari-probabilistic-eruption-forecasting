@@ -86,7 +86,7 @@ deploy-api:
     cat > /tmp/docker_config.json <<EOF
     {
       "Image": "${IMAGE}",
-      "Cmd": ["whakaaribn_api", "--rootdir", "/home/bayes/data"],
+      "Cmd": ["tonik_api", "--rootdir", "/home/bayes/data/results"],
       "HostConfig": {
         "PortBindings": { "8003/tcp": [{ "HostPort": "${API_PORT}" }] },
         "ExposedPorts": { "8003/tcp": {} },

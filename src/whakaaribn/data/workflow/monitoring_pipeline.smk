@@ -1,23 +1,21 @@
 from datetime import datetime, timezone
+import os
 import pandas as pd
 
 
 STARTDATE=datetime(2009, 1, 1, tzinfo=timezone.utc)
 
-N_JOBS = config.get("n_jobs", 1)
+N_JOBS = config.get("n_jobs", max(1, (os.cpu_count() or 1) // 2))
+
+
+FORECASTS = ["best_model", "median_ensemble", "max_ensemble", "min_ensemble"]
+DATASETS = ["Eqr", "RSAM", "SO2", "H2S", "CO2"]
+HORIZONS = [28, 91]
 
 rule all:
     input:
-        "results/whakaari_forecasts/best_model.nc",
-        "results/whakaari_forecasts/median_ensemble.nc",
-        "results/whakaari_forecasts/max_ensemble.nc",
-        "results/whakaari_forecasts/min_ensemble.nc",
-        "results/whakaari_forecasts/Eqr.nc",
-        "results/whakaari_forecasts/RSAM.nc",
-        "results/whakaari_forecasts/SO2.nc",
-        "results/whakaari_forecasts/H2S.nc",
-        "results/whakaari_forecasts/CO2.nc"
-
+        expand("results/whakaari_forecasts/{horizon}_day_forecast/{forecast}.nc", horizon=HORIZONS, forecast=FORECASTS),
+        expand("results/whakaari_forecasts/{dataset}.nc", dataset=DATASETS)
 
 rule live_data:
     output:
@@ -44,7 +42,7 @@ rule assign_groups_live_data:
 
 rule grid_search:
     input:
-        "data/whakaari_data_with_groups.csv"
+        "data/whakaari_live_data_with_groups.csv"
     output:
         "results/grid_search_results.csv"
     run:
@@ -96,40 +94,35 @@ rule save_results:
         forecast="forecasts/whakaari_live_forecasts.nc",
         uncertainty="forecasts/whakaari_live_uncertainty.nc",
     output:
-        "results/whakaari_forecasts/best_model.nc",
-        "results/whakaari_forecasts/median_ensemble.nc",
-        "results/whakaari_forecasts/max_ensemble.nc",
-        "results/whakaari_forecasts/min_ensemble.nc"
+        expand("results/whakaari_forecasts/{{horizon}}_day_forecast/{forecast}.nc", forecast=FORECASTS)
     params:
         outdir="results"
     run:
         import xarray as xr
         from tonik import Storage
+        from whakaaribn import convert_probability
         forecast_store = Storage('whakaari_forecasts', params.outdir)
+        substore = forecast_store.get_substore(f"{wildcards.horizon}_day_forecast")
         with xr.open_dataset(input.forecast) as ds:
             xds_best = ds.load()
         with xr.open_dataset(input.uncertainty) as ds:
             xds_ensemble = ds.load()
         datasets = {}
-        datasets['best_model'] = (["datetime"], xds_best['probs'].data)
+        datasets['best_model'] = (["datetime"], convert_probability(xds_best['probs'].data, 40, int(wildcards.horizon)))
         median_ens = xds_ensemble.median('model_score').to_array().squeeze('variable')
         min_ens = xds_ensemble.chunk(dict(model_score=-1)).min('model_score').to_array().squeeze('variable')
         max_ens = xds_ensemble.chunk(dict(model_score=-1)).max('model_score').to_array().squeeze('variable')
-        datasets['median_ensemble'] = (["datetime"], median_ens.data)
-        datasets['max_ensemble'] = (["datetime"], max_ens.data)
-        datasets['min_ensemble'] = (["datetime"], min_ens.data)
+        datasets['median_ensemble'] = (["datetime"], convert_probability(median_ens.data, 40, int(wildcards.horizon)))
+        datasets['max_ensemble'] = (["datetime"], convert_probability(max_ens.data, 40, int(wildcards.horizon)))
+        datasets['min_ensemble'] = (["datetime"], convert_probability(min_ens.data, 40, int(wildcards.horizon)))
         xds = xr.Dataset(datasets, coords={"datetime": xds_best.datetime})
-        forecast_store.save(xds)
+        substore.save(xds)
 
 rule save_data:
     input:
         "data/whakaari_live_data.csv"
     output:
-        "results/whakaari_forecasts/Eqr.nc",
-        "results/whakaari_forecasts/RSAM.nc",
-        "results/whakaari_forecasts/SO2.nc",
-        "results/whakaari_forecasts/H2S.nc",
-        "results/whakaari_forecasts/CO2.nc"
+        expand("results/whakaari_forecasts/{dataset}.nc", dataset=DATASETS)
     params:
         outdir="results"
     run:
@@ -139,4 +132,3 @@ rule save_data:
         output_data.index.name = 'datetime'
         output_data.index = output_data.index.tz_localize(None)
         forecast_store.save(output_data.to_xarray())
- 
