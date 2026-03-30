@@ -112,7 +112,7 @@ def _run_monitoring_workflow(directory, cores=1, clean=False):
         logger.error("Workflow run failed: %s", e)
 
 
-def daemon(directory, backend="pgmpy", cores=1, clean=False):
+def daemon(directory, cores=1, clean=False):
     """Start a scheduled job running the workflow in regular intervals."""
     _run_monitoring_workflow(directory, cores=cores, clean=clean)
     schedule.every().day.at("13:00").do(
@@ -185,7 +185,7 @@ def main(argv=None):
             args.directory, backend=args.backend, cores=args.cores, clean=args.clean
         )
     elif args.command == "daemon":
-        daemon(args.directory, backend=args.backend, cores=args.cores, clean=args.clean)
+        daemon(args.directory, cores=args.cores, clean=args.clean)
     else:
         parser.print_help()
         sys.exit(1)
